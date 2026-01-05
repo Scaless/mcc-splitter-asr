@@ -16,6 +16,8 @@ dependencies = [
  "arrayvec",
  "asr-derive",
  "bytemuck",
+ "itoa",
+ "ryu",
  "time",
  "wasi",
 ]
@@ -67,11 +69,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
+name = "itoa"
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+
+[[package]]
 name = "mcc-splitter-asr"
 version = "0.1.0"
 dependencies = [
  "asr",
  "bytemuck",
+ "pod-enum",
 ]
 
 [[package]]
@@ -79,6 +88,27 @@ name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+
+[[package]]
+name = "pod-enum"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9890146f8f486cd3dfa258803e6646cc0c8c474615676e6f4c13969be9db1d1"
+dependencies = [
+ "bytemuck",
+ "pod-enum-macros",
+]
+
+[[package]]
+name = "pod-enum-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2a7ab329a294b998a72caab2a8e00c595b87d13d3d008a32205189d3d6a95f2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "powerfmt"
@@ -103,6 +133,12 @@ checksum = "a338cc41d27e6cc6dce6cefc13a0729dfbb81c262b1f519331575dd80ef3067f"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "ryu"
+version = "1.0.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a50f4cf475b65d88e057964e0e9bb1f0aa9bbb2036dc65c64596b42932536984"
 
 [[package]]
 name = "syn"
