@@ -1206,15 +1206,8 @@ async fn main() {
         if is_winstore && mcc_version.minor_version < 3272 {
             // We don't want to burn CPU by constantly attaching/detaching so
             // spin in an idle loop until the game is closed.
-
             print_message(&format!("WinStore version {} is not supported, going into idle mode.", mcc_version_str));
-
-            process
-                .until_closes(async {
-                    asr::future::next_tick().await;
-                })
-                .await;
-
+            process.until_closes(asr::future::next_tick()).await;
             continue;
         }
 
@@ -1235,12 +1228,12 @@ async fn main() {
                     dlls.dll_halo3_odst = process.get_module_address("halo3odst.dll").unwrap_or_default();
                     dlls.dll_halo_reach = process.get_module_address("haloreach.dll").unwrap_or_default();
 
-                    asr::timer::set_variable("dll_h1", dlls.dll_halo1.to_string().as_str());
-                    asr::timer::set_variable("dll_h2", dlls.dll_halo2.to_string().as_str());
-                    asr::timer::set_variable("dll_h3", dlls.dll_halo3.to_string().as_str());
-                    asr::timer::set_variable("dll_h4", dlls.dll_halo4.to_string().as_str());
-                    asr::timer::set_variable("dll_h3_odst", dlls.dll_halo3_odst.to_string().as_str());
-                    asr::timer::set_variable("dll_reach", dlls.dll_halo_reach.to_string().as_str());
+                    // asr::timer::set_variable("dll_h1", dlls.dll_halo1.to_string().as_str());
+                    // asr::timer::set_variable("dll_h2", dlls.dll_halo2.to_string().as_str());
+                    // asr::timer::set_variable("dll_h3", dlls.dll_halo3.to_string().as_str());
+                    // asr::timer::set_variable("dll_h4", dlls.dll_halo4.to_string().as_str());
+                    // asr::timer::set_variable("dll_h3_odst", dlls.dll_halo3_odst.to_string().as_str());
+                    // asr::timer::set_variable("dll_reach", dlls.dll_halo_reach.to_string().as_str());
 
                     update_game_pointers(is_winstore, mcc_version, &dlls, &mut ptrs);
 
@@ -1265,7 +1258,6 @@ async fn main() {
                             // Check for start conditions
                             if should_start(&state, &settings, &mut splitter, current_game, menu_indicator) {
                                 asr::timer::start();
-                                //splitter.vars_reset = true;
                             }
                         }
                         TimerState::Running | TimerState::Paused => {
@@ -1275,7 +1267,6 @@ async fn main() {
 
                             // Check for reset
                             if should_reset(&state, &settings, &splitter, current_game, menu_indicator) {
-                                print_message("reset");
                                 asr::timer::reset();
                                 splitter.reset();
                                 continue;
@@ -2214,6 +2205,9 @@ fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut Splitte
 }
 
 fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: u8) {
+
+    // TODO: This is all super borked
+
     // Only handle IGT for games that use it (H3, H4, ODST, Reach) or when igt_mode is on
     let uses_igt = settings.igt_mode || matches!(current_game, 2 | 3 | 5 | 6);
 
@@ -2334,7 +2328,9 @@ fn handle_h1_loading(state: &GameState, splitter: &mut SplitterState, load_indic
     }
 }
 fn handle_h2_loading(state: &GameState, splitter: &mut SplitterState, load_indicator: u8) {
-    // Simplified H2 loading logic
+
+    // TODO: This is broken and doesn't take into account internal cutscenes
+
     let menu_indicator = current!(state.mcc_menuindicator).unwrap_or(0);
     let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
     let fadebyte = current!(state.h2_fadebyte).unwrap_or(0);
