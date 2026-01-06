@@ -350,622 +350,245 @@ fn update_game_pointers(is_winstore: bool, mcc_version: FileVersion, dlls: &Game
         }
     }
 
-    match mcc_version.minor_version {
-        2448 => {
-            // MCC - Steam only
-            let menustate: u64 = 0x3A24FC4;
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xA]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3A253A0, 0x0]);
-            ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3A25188]);
-            ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3A254B0, 0x1A4]);
+    let v = mcc_version.minor_version;
 
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2AF10D0;
-            const H1_MAP: u64 = 0x2A4BC04;
-            const H1_CINFLAGS: u64 = 0x2AF1868;
-            const H1_COORDS: u64 = 0x2A57E74;
-            const H1_FADE: u64 = 0x2B81CE8;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2B58A24]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2AF477C]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x19F0400]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x143ACA0;
-            const H2_COORDS: u64 = 0xDA5CD8;
-            const H2_FADE: u64 = 0x13DFC58;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE63FB3]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE22F40]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCD7D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xDA6140, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE63144]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCFB918]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1D2C460]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1DDC3BC]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2961E0C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0x9F3EF0, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1CB15C8, 0x1051D]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2868777]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x36778E0]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0xEEFEB0, 0x544249]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x1CDF200]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x1DB2568]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x2E46964]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0xE8520C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x276ACA3]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2441AB8, -0x560i64 as u64]);
-        }
-
-        2645 => {
-            // MCC - Steam only
-            let menustate: u64 = 0x3B80E64;
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xC]);
-            ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3B81270, 0x0]);
-            ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3B80FF8]);
-            ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3B81380, 0x1A4]);
-
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2AF8240;
-            const H1_MAP: u64 = 0x2A52D84;
-            const H1_CINFLAGS: u64 = 0x2AF89B8;
-            const H1_COORDS: u64 = 0x2A5EFF4;
-            const H1_FADE: u64 = 0x2B88E58;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2B5FC04]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2AFB954]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x19F748C]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x15186A0;
-            const H2_COORDS: u64 = 0xD523A8;
-            const H2_FADE: u64 = 0x14BD450;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xD42E68]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x1475C10]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCA4D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xD52800, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x14B5DE4]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCC74A8]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1E0D358]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1EDAA9C]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2A1F34C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0x9A4BA0, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1D91E68, 0x1077D]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2907107]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x3716270]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0xEEF330, 0x594249]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x2020CA8]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x2116FD8]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x2F91A9C]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0xF3020C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2836433]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2472A88]);
-        }
-
-        2904 => {
-            // MCC - Steam only
-            let menustate: u64 = 0x3F7BAAD;
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x8]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x5]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x6]);
-            ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3F7C380, 0x0]);
-            ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3F7C33C]);
-            ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3F7C358, 0x1A4]);
-
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2B611A0;
-            const H1_MAP: u64 = 0x2D66A24;
-            const H1_CINFLAGS: u64 = 0x2E773D8;
-            const H1_COORDS: u64 = 0x2D7313C;
-            const H1_FADE: u64 = 0x2E7F868;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2B88764]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2E7A354]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x1B661CC]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x1520498;
-            const H2_COORDS: u64 = 0xD5A148;
-            const H2_FADE: u64 = 0x14C5228;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xD4ABF8]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x147D9F0]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCACD74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xD5A5A0, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x14BDBC4]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCCF280]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1E092E8]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1E9B4BC]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x29E194C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0x99FCA0, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1D8DF48, 0x1073D]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x28A4C3F]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x3719E24]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x23CC7D8, 0x1F419]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x202EA58]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x21353D8]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x2F9FD4C]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0xF3EB8C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x29A3743]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x25DC188]);
-        }
-
-        2969 => {
-            // MCC - Steam only
-            let menustate: u64 = 0x3F9446C;
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xC]);
-            ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3F94E90, 0x0]);
-            ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3F94F88]);
-            ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3F94F60, 0x1A4]);
-
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2CC5860;
-            const H1_MAP: u64 = 0x2EEB024;
-            const H1_CINFLAGS: u64 = 0x2FFBD28;
-            const H1_COORDS: u64 = 0x1DF5FF8;
-            const H1_FADE: u64 = 0x30041A8;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2CECFD4]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x14872C0]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x1CE4920]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x14D9448;
-            const H2_COORDS: u64 = 0xD63A28;
-            const H2_FADE: u64 = 0x14CEB68;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xD54498]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x14872C0]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCB2D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xD63E80, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x14C7494]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xCD8998]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1EABB78]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1F3DD5C]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2B4178C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0xA41D20, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1E30758, 0x1074D]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2A39A8F]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x3BB32A0]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2514A88, 0x1F419]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x20D68F8]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x21DD308]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x3417D4C]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0xFB940C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2B03887]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x27564B0]);
-        }
-
-        3073 => {
-            // MCC - Steam only (Legacy Steam Support - No Winstore)
-            let menustate: u64 = 0x401B76C;
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xC]);
-            ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x401C1C0, 0x0]);
-            ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x401C204]);
-            ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x401C1D8, 0x1AC]);
-
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2CA0780;
-            const H1_MAP: u64 = 0x2C9F7C4;
-            const H1_CINFLAGS: u64 = 0x3005198;
-            const H1_COORDS: u64 = 0x2F00954;
-            const H1_FADE: u64 = 0x300D678;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2CEBD34]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x3008134]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x1CECDFC]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x15F42B8;
-            const H2_COORDS: u64 = 0xE7E308;
-            const H2_FADE: u64 = 0xE7E308;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE6ED78]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15A1BA0]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xDF7D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE7E760, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15E1D74]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE1F178]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1E92AB8]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1F2084C]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2B34F2C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0xA39220, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x1E19C98, 0xFDCD]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2A2F6D7]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x3B9C020]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x250B808, 0x1ED09]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x20C0DA8]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x21463B4]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x33FD0DC]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0xFDEAFC, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2AE485F]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2746930]);
-        }
-
-        3272 => {
-            // MCC - Steam/WinStore
-            let menustate: u64 = if is_winstore { 0x3E4C034 } else { 0x3FFDAA4 };
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xC]);
-            if is_winstore {
-                ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4CA78, 0x0]);
-                ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4CB30]);
-                ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4CA90, 0x1AC]);
-            } else {
-                ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3FFE4D8, 0x0]);
-                ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3FFE590]);
-                ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3FFE4F0, 0x1AC]);
+    // MCC
+    let (mcc_menustate, mcc_menu_offset, mcc_pause_offset, mcc_pgcr_offset, mcc_gameindicator, mcc_igt_float, mcc_comptimerstate, mcc_comptimer_offset) =
+        match v {
+            2448 => (0x3A24FC4, 0x11, 0xA, 0xB, 0x3A253A0, 0x3A25188, 0x3A254B0, 0x1A4),
+            2645 => (0x3B80E64, 0x11, 0xB, 0xC, 0x3B81270, 0x3B80FF8, 0x3B81380, 0x1A4),
+            2904 => (0x3F7BAAD, 0x8, 0x5, 0x6, 0x3F7C380, 0x3F7C33C, 0x3F7C358, 0x1A4),
+            2969 => (0x3F9446C, 0x11, 0xB, 0xC, 0x3F94E90, 0x3F94F88, 0x3F94F60, 0x1A4),
+            3073 => (0x401B76C, 0x11, 0xB, 0xC, 0x401C1C0, 0x401C204, 0x401C1D8, 0x1AC),
+            3272 => {
+                if is_winstore {
+                    (0x3E4C034, 0x11, 0xB, 0xC, 0x3E4CA78, 0x3E4CB30, 0x3E4CA90, 0x1AC)
+                } else {
+                    (0x3FFDAA4, 0x11, 0xB, 0xC, 0x3FFE4D8, 0x3FFE590, 0x3FFE4F0, 0x1AC)
+                }
             }
-
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2B23700;
-            const H1_MAP: u64 = 0x2B22744;
-            const H1_CINFLAGS: u64 = 0x2EA01F8;
-            const H1_COORDS: u64 = 0x2D9B9C4;
-            const H1_FADE: u64 = 0x2EA8708;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2B6F5E4]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2EA31C4]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x1B860A4]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x15F5788;
-            const H2_COORDS: u64 = 0xE7F5E8;
-            const H2_FADE: u64 = 0x15EA778;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE6FE68]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15A2EA0]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xDF8D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE7FA50, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15E3074]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE20278]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x20A8118]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2135F70]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2D3C04C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0xA4E170, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x202F2D8, 0xFDCD]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2A1F587]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x4E2FBA8]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x24FB708, 0x1ED09]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x20EF128]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x21F05F8]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x46E261C]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x100CB3C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2AFF81F]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x275D550]);
-        }
-
-        3385 => {
-            // MCC - Steam/WinStore
-            let menustate: u64 = if is_winstore { 0x3E4B034 } else { 0x3FFCA94 };
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xC]);
-            if is_winstore {
-                ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4BA68, 0x0]);
-                ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4BB28]);
-                ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4BA80, 0x1AC]);
-            } else {
-                ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3FFD4C8, 0x0]);
-                ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3FFD588]);
-                ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3FFD4E0, 0x1AC]);
+            3385 => {
+                if is_winstore {
+                    (0x3E4B034, 0x11, 0xB, 0xC, 0x3E4BA68, 0x3E4BB28, 0x3E4BA80, 0x1AC)
+                } else {
+                    (0x3FFCA94, 0x11, 0xB, 0xC, 0x3FFD4C8, 0x3FFD588, 0x3FFD4E0, 0x1AC)
+                }
             }
-
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2B23700;
-            const H1_MAP: u64 = 0x2B22744;
-            const H1_CINFLAGS: u64 = 0x2EA0208;
-            const H1_COORDS: u64 = 0x2D9B9C4;
-            const H1_FADE: u64 = 0x2EA8718;
-
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2B6F5E4]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2EA31D4]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x1B860A4]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
-
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x15F5788;
-            const H2_COORDS: u64 = 0xE7F5E8;
-            const H2_FADE: u64 = 0x15EA778;
-
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE6FE68]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15A2EA0]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xDF8D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE7FA50, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15E3074]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE20278]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
-
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x20A8118]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2135F70]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2D3C04C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0xA4E170, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x202F2D8, 0xFDCD]);
-
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2A1F587]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x4E2FBA8]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x24FB708, 0x1ED09]);
-
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x20EF128]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x21F05F8]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x46E261C]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x100CB3C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2AFF81F]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x275D550]);
-        }
-        3528 | 3498 | 3495 | _ /* Unknown Version, attempt to use latest */ => {
-            // MCC - Steam/WinStore
-            let menustate: u64 = if is_winstore { 0x3E4EFE4 } else { 0x4000B8C };
-            ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate]);
-            ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0x11]);
-            ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xB]);
-            ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[menustate + 0xC]);
-            if is_winstore {
-                ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4FAB8, 0x0]);
-                ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4FAA4]);
-                ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x3E4FAF8, 0x1AC]);
-            } else {
-                ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[0x4001658, 0x0]);
-                ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[0x4001644]);
-                ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[0x4001698, 0x1AC]);
+            v if v >= 3528 => {
+                if is_winstore {
+                    (0x3E4EFE4, 0x11, 0xB, 0xC, 0x3E4FAB8, 0x3E4FAA4, 0x3E4FAF8, 0x1AC)
+                } else {
+                    (0x4000B8C, 0x11, 0xB, 0xC, 0x4001658, 0x4001644, 0x4001698, 0x1AC)
+                }
             }
+            _ => (0, 0, 0, 0, 0, 0, 0, 0),
+        };
 
-            // Halo 1
-            const H1_GLOBALS: u64 = 0x2B23700;
-            const H1_MAP: u64 = 0x2B22744;
-            const H1_CINFLAGS: u64 = 0x2EA0208;
-            const H1_COORDS: u64 = 0x2D9B9C4;
-            const H1_FADE: u64 = 0x2EA8718;
+    if mcc_menustate != 0 {
+        ptrs.mcc_loadindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_menustate]);
+        ptrs.mcc_menuindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_menustate + mcc_menu_offset]);
+        ptrs.mcc_pauseindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_menustate + mcc_pause_offset]);
+        ptrs.mcc_pgcrindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_menustate + mcc_pgcr_offset]);
+    }
+    if mcc_gameindicator != 0 {
+        ptrs.mcc_gameindicator = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_gameindicator, 0x0]);
+    }
+    if mcc_igt_float != 0 {
+        ptrs.mcc_igt_float = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_igt_float]);
+    }
+    if mcc_comptimerstate != 0 {
+        ptrs.mcc_comptimerstate = DeepPtr::new_64bit(dlls.exe_mcc, &[mcc_comptimerstate, mcc_comptimer_offset]);
+    }
 
-            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2B6F5E4]);
-            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[0x2EA31D4]);
-            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[0x1B860A4]);
-            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x20]);
-            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x1]);
-            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0A]);
-            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_CINFLAGS, 0x0B]);
-            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS]);
-            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_COORDS + 0x4]);
-            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C0]);
-            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C4]);
-            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_FADE, 0x3C6]);
-            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_GLOBALS + 0x17]);
-            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x64]);
-            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[H1_MAP + 0x68]);
+    // Halo 1
+    let (h1_tickcounter, h1_igt, h1_bspstate, h1_globals, h1_map, h1_cinflags, h1_coords, h1_fade) = match v {
+        2448 => (0x2B58A24, 0x2AF477C, 0x19F0400, 0x2AF10D0, 0x2A4BC04, 0x2AF1868, 0x2A57E74, 0x2B81CE8),
+        2645 => (0x2B5FC04, 0x2AFB954, 0x19F748C, 0x2AF8240, 0x2A52D84, 0x2AF89B8, 0x2A5EFF4, 0x2B88E58),
+        2904 => (0x2B88764, 0x2E7A354, 0x1B661CC, 0x2B611A0, 0x2D66A24, 0x2E773D8, 0x2D7313C, 0x2E7F868),
+        2969 => (0x2CECFD4, 0x14872C0, 0x1CE4920, 0x2CC5860, 0x2EEB024, 0x2FFBD28, 0x1DF5FF8, 0x30041A8),
+        3073 => (0x2CEBD34, 0x3008134, 0x1CECDFC, 0x2CA0780, 0x2C9F7C4, 0x3005198, 0x2F00954, 0x300D678),
+        3272 => (0x2B6F5E4, 0x2EA31C4, 0x1B860A4, 0x2B23700, 0x2B22744, 0x2EA01F8, 0x2D9B9C4, 0x2EA8708),
+        v if v >= 3385 => (0x2B6F5E4, 0x2EA31D4, 0x1B860A4, 0x2B23700, 0x2B22744, 0x2EA0208, 0x2D9B9C4, 0x2EA8718),
+        _ => (0, 0, 0, 0, 0, 0, 0, 0),
+    };
+    if !dlls.dll_halo1.is_null() {
+        if h1_tickcounter != 0 {
+            ptrs.h1_tickcounter = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_tickcounter]);
+        }
+        if h1_igt != 0 {
+            ptrs.h1_igt = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_igt]);
+        }
+        if h1_bspstate != 0 {
+            ptrs.h1_bspstate = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_bspstate]);
+        }
+        if h1_map != 0 {
+            ptrs.h1_levelname = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_map + 0x20]);
+            ptrs.h1_checksum = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_map + 0x64]);
+            ptrs.h1_aflags = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_map + 0x68]);
+        }
+        if h1_globals != 0 {
+            ptrs.h1_gamewon = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_globals + 0x1]);
+            ptrs.h1_deathflag = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_globals + 0x17]);
+        }
+        if h1_cinflags != 0 {
+            ptrs.h1_cinematic = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_cinflags, 0x0A]);
+            ptrs.h1_cutsceneskip = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_cinflags, 0x0B]);
+        }
+        if h1_coords != 0 {
+            ptrs.h1_xpos = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_coords]);
+            ptrs.h1_ypos = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_coords + 0x4]);
+        }
+        if h1_fade != 0 {
+            ptrs.h1_fadetick = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_fade, 0x3C0]);
+            ptrs.h1_fadelength = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_fade, 0x3C4]);
+            ptrs.h1_fadebyte = DeepPtr::new_64bit(dlls.dll_halo1, &[h1_fade, 0x3C6]);
+        }
+    }
 
-            // Halo 2
-            const H2_CINFLAGS: u64 = 0x15F6788;
-            const H2_COORDS: u64 = 0xE805E8;
-            const H2_FADE: u64 = 0x15EB778;
+    // Halo 2
+    let (h2_levelname, h2_igt, h2_bspstate, h2_deathflag, h2_tickcounter, h2_graphics, h2_cinflags, h2_coords, h2_fade) = match v {
+        2448 => (0xE63FB3, 0xE22F40, 0xCD7D74, 0xDA6140, 0xE63144, 0xCFB918, 0x143ACA0, 0xDA5CD8, 0x13DFC58),
+        2645 => (0xD42E68, 0x1475C10, 0xCA4D74, 0xD52800, 0x14B5DE4, 0xCC74A8, 0x15186A0, 0xD523A8, 0x14BD450),
+        2904 => (0xD4ABF8, 0x147D9F0, 0xCACD74, 0xD5A5A0, 0x14BDBC4, 0xCCF280, 0x1520498, 0xD5A148, 0x14C5228),
+        2969 => (0xD54498, 0x14872C0, 0xCB2D74, 0xD63E80, 0x14C7494, 0xCD8998, 0x14D9448, 0xD63A28, 0x14CEB68),
+        3073 => (0xE6ED78, 0x15A1BA0, 0xDF7D74, 0xE7E760, 0x15E1D74, 0xE1F178, 0x15F42B8, 0xE7E308, 0xE7E308),
+        3272 | 3385 => (0xE6FE68, 0x15A2EA0, 0xDF8D74, 0xE7FA50, 0x15E3074, 0xE20278, 0x15F5788, 0xE7F5E8, 0x15EA778),
+        v if v >= 3528 => (0xE70E68, 0x15A3EA0, 0xDF9D74, 0xE80A50, 0x15E4074, 0xE21278, 0x15F6788, 0xE805E8, 0x15EB778),
+        _ => (0, 0, 0, 0, 0, 0, 0, 0, 0),
+    };
+    if !dlls.dll_halo2.is_null() {
+        if h2_levelname != 0 {
+            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_levelname]);
+        }
+        if h2_igt != 0 {
+            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_igt]);
+        }
+        if h2_bspstate != 0 {
+            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_bspstate]);
+        }
+        if h2_deathflag != 0 {
+            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_deathflag, -0xEFi64 as u64]);
+        }
+        if h2_tickcounter != 0 {
+            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_tickcounter]);
+        }
+        if h2_graphics != 0 {
+            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_graphics]);
+        }
+        if h2_cinflags != 0 {
+            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_cinflags, -0x92Ei64 as u64]);
+            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_cinflags, -0x938i64 as u64]);
+        }
+        if h2_coords != 0 {
+            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_coords]);
+            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_coords + 0x4]);
+        }
+        if h2_fade != 0 {
+            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_fade, 0x0]);
+            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[h2_fade, 0x4]);
+        }
+    }
 
-            ptrs.h2_levelname = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE70E68]);
-            ptrs.h2_igt = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15A3EA0]);
-            ptrs.h2_bspstate = DeepPtr::new_64bit(dlls.dll_halo2, &[0xDF9D74]);
-            ptrs.h2_deathflag = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE80A50, -0xEFi64 as u64]);
-            ptrs.h2_tickcounter = DeepPtr::new_64bit(dlls.dll_halo2, &[0x15E4074]);
-            ptrs.h2_graphics = DeepPtr::new_64bit(dlls.dll_halo2, &[0xE21278]);
-            ptrs.h2_fadebyte = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x92Ei64 as u64]);
-            ptrs.h2_letterbox = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_CINFLAGS, -0x938i64 as u64]);
-            ptrs.h2_xpos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS]);
-            ptrs.h2_ypos = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_COORDS + 0x4]);
-            ptrs.h2_fadetick = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x0]);
-            ptrs.h2_fadelength = DeepPtr::new_64bit(dlls.dll_halo2, &[H2_FADE, 0x4]);
+    // Halo 3
+    let (h3_levelname, h3_theatertime, h3_tickcounter, h3_bspstate, h3_deathflag_offset1, h3_deathflag_offset2) = match v {
+        2448 => (0x1D2C460, 0x1DDC3BC, 0x2961E0C, 0x9F3EF0, 0x1CB15C8, 0x1051D),
+        2645 => (0x1E0D358, 0x1EDAA9C, 0x2A1F34C, 0x9A4BA0, 0x1D91E68, 0x1077D),
+        2904 => (0x1E092E8, 0x1E9B4BC, 0x29E194C, 0x99FCA0, 0x1D8DF48, 0x1073D),
+        2969 => (0x1EABB78, 0x1F3DD5C, 0x2B4178C, 0xA41D20, 0x1E30758, 0x1074D),
+        3073 | 3272 | 3385 if v == 3073 => (0x1E92AB8, 0x1F2084C, 0x2B34F2C, 0xA39220, 0x1E19C98, 0xFDCD),
+        3272 | 3385 => (0x20A8118, 0x2135F70, 0x2D3C04C, 0xA4E170, 0x202F2D8, 0xFDCD),
+        v if v >= 3528 => (0x20A9118, 0x2136F70, 0x2D3D04C, 0xA4F170, 0x20302D8, 0xFDCD),
+        _ => (0, 0, 0, 0, 0, 0),
+    };
+    if !dlls.dll_halo3.is_null() {
+        if h3_levelname != 0 {
+            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[h3_levelname]);
+        }
+        if h3_theatertime != 0 {
+            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[h3_theatertime]);
+        }
+        if h3_tickcounter != 0 {
+            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[h3_tickcounter]);
+        }
+        if h3_bspstate != 0 {
+            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[h3_bspstate, 0x2C]);
+        }
+        if h3_deathflag_offset1 != 0 {
+            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[h3_deathflag_offset1, h3_deathflag_offset2]);
+        }
+    }
 
-            // Halo 3
-            ptrs.h3_levelname = DeepPtr::new_64bit(dlls.dll_halo3, &[0x20A9118]);
-            ptrs.h3_theatertime = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2136F70]);
-            ptrs.h3_tickcounter = DeepPtr::new_64bit(dlls.dll_halo3, &[0x2D3D04C]);
-            ptrs.h3_bspstate = DeepPtr::new_64bit(dlls.dll_halo3, &[0xA4F170, 0x2C]);
-            ptrs.h3_deathflag = DeepPtr::new_64bit(dlls.dll_halo3, &[0x20302D8, 0xFDCD]);
+    // Reach
+    let (hr_levelname, hr_bspstate, hr_deathflag_offset1, hr_deathflag_offset2) = match v {
+        2448 => (0x2868777, 0x36778E0, 0xEEFEB0, 0x544249),
+        2645 => (0x2907107, 0x3716270, 0xEEF330, 0x594249),
+        2904 | 2969 if v == 2904 => (0x28A4C3F, 0x3719E24, 0x23CC7D8, 0x1F419),
+        2969 => (0x2A39A8F, 0x3BB32A0, 0x2514A88, 0x1F419),
+        3073 | 3272 | 3385 if v == 3073 => (0x2A2F6D7, 0x3B9C020, 0x250B808, 0x1ED09),
+        3272 | 3385 => (0x2A1F587, 0x4E2FBA8, 0x24FB708, 0x1ED09),
+        v if v >= 3528 => (0x2A1F527, 0x4E2FB28, 0x24FB5F0, 0x1ED09),
+        _ => (0, 0, 0, 0),
+    };
+    if !dlls.dll_halo_reach.is_null() {
+        if hr_levelname != 0 {
+            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[hr_levelname]);
+        }
+        if hr_bspstate != 0 {
+            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[hr_bspstate]);
+        }
+        if hr_deathflag_offset1 != 0 {
+            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[hr_deathflag_offset1, hr_deathflag_offset2]);
+        }
+    }
 
-            // Halo Reach
-            ptrs.hr_levelname = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x2A1F527]);
-            ptrs.hr_bspstate = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x4E2FB28]);
-            ptrs.hr_deathflag = DeepPtr::new_64bit(dlls.dll_halo_reach, &[0x24FB5F0, 0x1ED09]);
+    // ODST
+    let (odst_levelname, odst_streets, odst_bspstate, odst_deathflag) = match v {
+        _v if dlls.dll_halo3_odst.is_null() => (0, 0, 0, 0),
+        2448 => (0x1CDF200, 0x1DB2568, 0x2E46964, 0xE8520C),
+        2645 => (0x2020CA8, 0x2116FD8, 0x2F91A9C, 0xF3020C),
+        2904 => (0x202EA58, 0x21353D8, 0x2F9FD4C, 0xF3EB8C),
+        2969 => (0x20D68F8, 0x21DD308, 0x3417D4C, 0xFB940C),
+        3073 => (0x20C0DA8, 0x21463B4, 0x33FD0DC, 0xFDEAFC),
+        v if v >= 3272 => (0x20EF128, 0x21F05F8, 0x46E261C, 0x100CB3C),
+        _ => (0, 0, 0, 0),
+    };
+    if !dlls.dll_halo3_odst.is_null() {
+        if odst_levelname != 0 {
+            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[odst_levelname]);
+        }
+        if odst_streets != 0 {
+            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[odst_streets]);
+        }
+        if odst_bspstate != 0 {
+            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[odst_bspstate]);
+        }
+        if odst_deathflag != 0 {
+            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[odst_deathflag, -0x913i64 as u64]);
+        }
+    }
 
-            // ODST
-            ptrs.odst_levelname = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x20EF128]);
-            ptrs.odst_streets = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x21F05F8]);
-            ptrs.odst_bspstate = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x46E261C]);
-            ptrs.odst_deathflag = DeepPtr::new_64bit(dlls.dll_halo3_odst, &[0x100CB3C, -0x913i64 as u64]);
-
-            // Halo 4
-            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[0x2AFF89F]);
-            ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[0x275D5D0]);
+    // Halo 4
+    let (h4_levelname, h4_bspstate_offset1, h4_bspstate_offset2) = match v {
+        _v if dlls.dll_halo4.is_null() => (0, 0, 0),
+        2448 => (0x276ACA3, 0x2441AB8, -0x560i64 as u64),
+        2645 => (0x2836433, 0x2472A88, 0),
+        2904 => (0x29A3743, 0x25DC188, 0),
+        2969 => (0x2B03887, 0x27564B0, 0),
+        3073 => (0x2AE485F, 0x2746930, 0),
+        3272 | 3385 => (0x2AFF81F, 0x275D550, 0),
+        v if v >= 3528 => (0x2AFF89F, 0x275D5D0, 0),
+        _ => (0, 0, 0),
+    };
+    if !dlls.dll_halo4.is_null() {
+        if h4_levelname != 0 {
+            ptrs.h4_levelname = DeepPtr::new_64bit(dlls.dll_halo4, &[h4_levelname]);
+        }
+        if h4_bspstate_offset1 != 0 {
+            if h4_bspstate_offset2 != 0 {
+                ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[h4_bspstate_offset1, h4_bspstate_offset2]);
+            } else {
+                ptrs.h4_bspstate = DeepPtr::new_64bit(dlls.dll_halo4, &[h4_bspstate_offset1]);
+            }
         }
     }
 }
@@ -2205,7 +1828,6 @@ fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut Splitte
 }
 
 fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: u8) {
-
     // TODO: This is all super borked
 
     // Only handle IGT for games that use it (H3, H4, ODST, Reach) or when igt_mode is on
@@ -2328,7 +1950,6 @@ fn handle_h1_loading(state: &GameState, splitter: &mut SplitterState, load_indic
     }
 }
 fn handle_h2_loading(state: &GameState, splitter: &mut SplitterState, load_indicator: u8) {
-
     // TODO: This is broken and doesn't take into account internal cutscenes
 
     let menu_indicator = current!(state.mcc_menuindicator).unwrap_or(0);
