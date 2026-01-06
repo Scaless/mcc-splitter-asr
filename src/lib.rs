@@ -808,9 +808,17 @@ async fn main() {
         })
         .await;
 
+        let mcc_addr = process.get_module_address(exe_name).unwrap_or_default();
+        if mcc_addr.is_null() {
+            // On Linux, process name is limited to 15 chars so the Steam and WinStore names overlap.
+            // https://github.com/LiveSplit/livesplit-core/blob/a135301b008d9211ae37ae14b4dc6cec5a3c2aaa/crates/livesplit-auto-splitting/src/runtime/mod.rs#L155
+            // If we grabbed the wrong one, just try again.
+            asr::future::next_tick().await;
+            continue;
+        }
+
         let is_winstore = exe_name != "MCC-Win64-Shipping.exe";
-        let mcc_addr = process.get_module_address(exe_name).unwrap();
-        let mcc_version = FileVersion::read(&process, mcc_addr).unwrap();
+        let mcc_version = FileVersion::read(&process, mcc_addr).unwrap_or_default();
         let mcc_version_str = &format!(
             "{}.{}.{}.{}",
             mcc_version.major_version, mcc_version.minor_version, mcc_version.build_part, mcc_version.private_part
