@@ -954,18 +954,20 @@ async fn main() {
     let mut splitter = SplitterState::default();
 
     loop {
-        let (process, exe_name) = asr::future::retry(|| {
-            ["MCC-Win64-Shipping.exe", "MCC-Win64-Shipping-WinStore.exe", "MCCWinStore-Win64-Shipping.exe"]
-                .into_iter()
-                .find_map(|name| Process::attach(name).map(|p| (p, name)))
-        })
-        .await;
+        let exe_names = ["MCC-Win64-Shipping.exe", "MCC-Win64-Shipping-WinStore.exe", "MCCWinStore-Win64-Shipping.exe"];
 
-        let mcc_addr = process.get_module_address(exe_name).unwrap_or_default();
+        let process = asr::future::retry(|| exe_names.into_iter().find_map(|name| Process::attach(name))).await;
+
+        // On Linux, process name is limited to 15 chars so the Steam and WinStore names overlap.
+        // https://github.com/LiveSplit/livesplit-core/blob/a135301b008d9211ae37ae14b4dc6cec5a3c2aaa/crates/livesplit-auto-splitting/src/runtime/mod.rs#L155
+        // Query each possible module to figure out which one we actually got.
+        let (exe_name, mcc_addr) = exe_names
+            .iter()
+            .find_map(|name| process.get_module_address(name).ok().map(|addr| (*name, addr)))
+            .unwrap_or_default();
+
         if mcc_addr.is_null() {
-            // On Linux, process name is limited to 15 chars so the Steam and WinStore names overlap.
-            // https://github.com/LiveSplit/livesplit-core/blob/a135301b008d9211ae37ae14b4dc6cec5a3c2aaa/crates/livesplit-auto-splitting/src/runtime/mod.rs#L155
-            // If we grabbed the wrong one, just try again.
+            print_message("Attached to process but no module was found!");
             asr::future::next_tick().await;
             continue;
         }
@@ -1003,6 +1005,8 @@ async fn main() {
                 dlls.exe_mcc = mcc_addr;
 
                 loop {
+                    asr::future::next_tick().await;
+
                     settings.update();
 
                     dlls.dll_halo1 = process.get_module_address("halo1.dll").unwrap_or_default();
@@ -1012,27 +1016,28 @@ async fn main() {
                     dlls.dll_halo3_odst = process.get_module_address("halo3odst.dll").unwrap_or_default();
                     dlls.dll_halo_reach = process.get_module_address("haloreach.dll").unwrap_or_default();
 
-                    // asr::timer::set_variable("dll_h1", dlls.dll_halo1.to_string().as_str());
-                    // asr::timer::set_variable("dll_h2", dlls.dll_halo2.to_string().as_str());
-                    // asr::timer::set_variable("dll_h3", dlls.dll_halo3.to_string().as_str());
-                    // asr::timer::set_variable("dll_h4", dlls.dll_halo4.to_string().as_str());
-                    // asr::timer::set_variable("dll_h3_odst", dlls.dll_halo3_odst.to_string().as_str());
-                    // asr::timer::set_variable("dll_reach", dlls.dll_halo_reach.to_string().as_str());
+                    asr::timer::set_variable("dll_h1", &dlls.dll_halo1.to_string());
+                    asr::timer::set_variable("dll_h2", &dlls.dll_halo2.to_string());
+                    asr::timer::set_variable("dll_h3", &dlls.dll_halo3.to_string());
+                    asr::timer::set_variable("dll_h4", &dlls.dll_halo4.to_string());
+                    asr::timer::set_variable("dll_h3_odst", &dlls.dll_halo3_odst.to_string());
+                    asr::timer::set_variable("dll_reach", &dlls.dll_halo_reach.to_string());
 
                     update_game_pointers(is_winstore, mcc_version, &dlls, &mut ptrs);
 
                     update_game_state_all(&mut state, &process, &ptrs);
-                    update_splitter_state(&mut state, &settings, &mut splitter);
 
                     // Get current game
-                    let current_game = MCCGame::from(current!(state.mcc_gameindicator).unwrap_or(255));
-                    let menu_indicator = current!(state.mcc_menuindicator).unwrap_or(0);
-                    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
+                    let Some(current_game_u8) = current!(state.mcc_gameindicator) else { continue };
+                    let Some(menu_indicator) = current!(state.mcc_menuindicator) else { continue };
+                    let Some(load_indicator) = current!(state.mcc_loadindicator) else { continue };
 
-                    // Handle timer state
-                    let timer_state = asr::timer::state();
+                    let current_game = MCCGame::from(current_game_u8);
 
-                    match timer_state {
+                    update_splitter_state(&mut state, &settings, &mut splitter, current_game, menu_indicator);
+
+                    // Split/Reset depending on timer state
+                    match asr::timer::state() {
                         TimerState::NotRunning => {
                             if splitter.vars_reset {
                                 splitter = SplitterState::default();
@@ -1074,18 +1079,13 @@ async fn main() {
                         }
                         _ => {}
                     }
-
-                    // Go around again
-                    asr::future::next_tick().await;
                 }
             })
             .await;
     }
 }
 
-fn update_splitter_state(state: &mut GameState, settings: &Settings, splitter: &mut SplitterState) {
-    let menu_indicator = current!(state.mcc_menuindicator).unwrap_or(0);
-
+fn update_splitter_state(state: &mut GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame, menu_indicator: u8) {
     if menu_indicator == 0 {
         if splitter.h3_reset_flag || settings.il_mode || settings.any_level {
             splitter.h3_reset_flag = false;
@@ -1094,8 +1094,6 @@ fn update_splitter_state(state: &mut GameState, settings: &Settings, splitter: &
             splitter.pgcr_exists = false;
         }
     }
-
-    let current_game = MCCGame::from(current!(state.mcc_gameindicator).unwrap_or(255));
 
     if current_game == MCCGame::Halo2 && menu_indicator == 1 {
         update_h2_tgj_flag(state, splitter);
@@ -1106,11 +1104,12 @@ fn update_splitter_state(state: &mut GameState, settings: &Settings, splitter: &
 }
 
 fn update_h2_tgj_flag(state: &GameState, splitter: &mut SplitterState) {
-    let level = current!(state.h2_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.h2_bspstate).unwrap_or(255);
-    let tickcounter = current!(state.h2_tickcounter).unwrap_or(0);
+    let Some(level) = current!(state.h2_levelname) else { return };
+    let Some(level_str) = level.validate_utf8().ok() else { return };
+    let Some(bspstate) = current!(state.h2_bspstate) else { return };
+    let Some(tickcounter) = current!(state.h2_tickcounter) else { return };
 
-    if level == "08b" && !splitter.h2_tgj_ready_flag {
+    if level_str == "08b" && !splitter.h2_tgj_ready_flag {
         if bspstate == 3 {
             splitter.h2_tgj_ready_flag = true;
             splitter.h2_tgj_ready_time = tickcounter;
@@ -1118,18 +1117,20 @@ fn update_h2_tgj_flag(state: &GameState, splitter: &mut SplitterState) {
     }
 
     // Reset flag on level change
-    let level_old = old!(state.h2_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    if level != level_old {
+    let Some(level_old) = old!(state.h2_levelname) else { return };
+    let Some(level_str_old) = level_old.validate_utf8().ok() else { return };
+    if level_str != level_str_old {
         splitter.h2_tgj_ready_flag = false;
         splitter.h2_tgj_ready_time = 0;
     }
 }
 
 fn update_h3_reset_flag(state: &GameState, splitter: &mut SplitterState) {
-    let level = current!(state.h3_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let theatertime = current!(state.h3_theatertime).unwrap_or(0);
+    let Some(level) = current!(state.h3_levelname) else { return };
+    let Some(level_str) = level.validate_utf8().ok() else { return };
+    let Some(theatertime) = current!(state.h3_theatertime) else { return };
 
-    if level == "010" && theatertime >= 15 {
+    if level_str == "010" && theatertime >= 15 {
         splitter.h3_reset_flag = true;
     }
 }
@@ -1142,34 +1143,31 @@ fn should_start(state: &GameState, settings: &Settings, splitter: &mut SplitterS
     splitter.started_game = current_game;
 
     match current_game {
-        MCCGame::Halo1 => should_start_h1(state, settings, splitter),
-        MCCGame::Halo2 => should_start_h2(state, settings, splitter),
-        MCCGame::Halo3 => should_start_h3(state, settings, splitter),
-        MCCGame::Halo4 => should_start_h4(state, settings, splitter),
-        MCCGame::ODST => should_start_odst(state, settings, splitter),
-        MCCGame::Reach => should_start_hr(state, settings, splitter),
+        MCCGame::Halo1 => should_start_h1(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo2 => should_start_h2(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo3 => should_start_h3(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo4 => should_start_h4(state, settings, splitter).unwrap_or(false),
+        MCCGame::ODST => should_start_odst(state, settings, splitter).unwrap_or(false),
+        MCCGame::Reach => should_start_hr(state, settings, splitter).unwrap_or(false),
         _ => false,
     }
 }
 
-fn should_start_h1(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = match current!(state.h1_levelname) {
-        Some(l) => l,
-        None => return false,
-    };
-    let level_str = level.validate_utf8().unwrap_or_default();
+fn should_start_h1(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h1_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
 
     if level_str.is_empty() {
-        return false;
+        return Some(false);
     }
 
-    let bspstate = current!(state.h1_bspstate).unwrap_or(255);
-    let xpos = current!(state.h1_xpos).unwrap_or(0.0);
-    let tickcounter = current!(state.h1_tickcounter).unwrap_or(0);
-    let cinematic = current!(state.h1_cinematic).unwrap_or(false);
-    let cinematic_old = old!(state.h1_cinematic).unwrap_or(false);
-    let cutsceneskip = current!(state.h1_cutsceneskip).unwrap_or(false);
-    let cutsceneskip_old = old!(state.h1_cutsceneskip).unwrap_or(false);
+    let bspstate = current!(state.h1_bspstate)?;
+    let xpos = current!(state.h1_xpos)?;
+    let tickcounter = current!(state.h1_tickcounter)?;
+    let cinematic = current!(state.h1_cinematic)?;
+    let cinematic_old = old!(state.h1_cinematic)?;
+    let cutsceneskip = current!(state.h1_cutsceneskip)?;
+    let cutsceneskip_old = old!(state.h1_cutsceneskip)?;
 
     // Check IL start conditions
     let should_start = match level_str {
@@ -1233,141 +1231,125 @@ fn should_start_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
 
     if should_start {
         splitter.started_level = level_str.to_string();
-        true
+        Some(true)
     } else {
-        false
+        Some(false)
     }
 }
 
-fn should_start_h2(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = match current!(state.h2_levelname) {
-        Some(l) => l,
-        None => return false,
-    };
-    let level_str = level.validate_utf8().unwrap_or_default();
+fn should_start_h2(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h2_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
 
-    let tickcounter = current!(state.h2_tickcounter).unwrap_or(0);
-    let fadebyte = current!(state.h2_fadebyte).unwrap_or(0);
-    let fadebyte_old = old!(state.h2_fadebyte).unwrap_or(0);
-    let igt = current!(state.h2_igt).unwrap_or(0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let bspstate = current!(state.h2_bspstate).unwrap_or(255);
+    let tickcounter = current!(state.h2_tickcounter)?;
+    let fadebyte = current!(state.h2_fadebyte)?;
+    let fadebyte_old = old!(state.h2_fadebyte)?;
+    let igt = current!(state.h2_igt)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let bspstate = current!(state.h2_bspstate)?;
 
     if settings.il_mode && level_str != "01a" {
         if igt > 10 && igt < 30 {
             splitter.started_level = level_str.to_string();
-            return true;
+            return Some(true);
         }
     } else {
         if level_str == "01a" && tickcounter >= 26 && tickcounter < 30 {
             splitter.started_level = level_str.to_string();
-            return true;
+            return Some(true);
         } else if level_str == "01b" && load_indicator == 0 && fadebyte == 0 && fadebyte_old == 1 && tickcounter < 30 {
             splitter.started_level = level_str.to_string();
-            return true;
+            return Some(true);
         } else if (settings.any_level || settings.il_mode) && load_indicator == 0 {
             if level_str == "03a" {
                 // Outskirts special logic
-                let fadetick = current!(state.h2_fadetick).unwrap_or(0);
-                let fadelength = current!(state.h2_fadelength).unwrap_or(0);
+                let fadetick = current!(state.h2_fadetick)?;
+                let fadelength = current!(state.h2_fadelength)?;
                 if fadebyte == 1 && bspstate == 0 && tickcounter > 10 && tickcounter < 100 {
                     if fadelength > 15 && tickcounter >= fadetick + (fadelength as f64 * 0.067) as u32 {
                         splitter.started_level = level_str.to_string();
-                        return true;
+                        return Some(true);
                     }
                 }
             } else if fadebyte == 0 && fadebyte_old == 1 && tickcounter < 120 {
                 splitter.started_level = level_str.to_string();
-                return true;
+                return Some(true);
             }
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_start_h3(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = match current!(state.h3_levelname) {
-        Some(l) => l,
-        None => return false,
-    };
-    let level_str = level.validate_utf8().unwrap_or_default();
+fn should_start_h3(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h3_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
 
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let theatertime = current!(state.h3_theatertime).unwrap_or(0);
-    let tickcounter = current!(state.h3_tickcounter).unwrap_or(0);
-    let tickcounter_old = old!(state.h3_tickcounter).unwrap_or(0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
+    let igt_float = current!(state.mcc_igt_float)?;
+    let theatertime = current!(state.h3_theatertime)?;
+    let tickcounter = current!(state.h3_tickcounter)?;
+    let tickcounter_old = old!(state.h3_tickcounter)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
 
     if settings.il_mode {
         if igt_float > 0.167 && igt_float < 0.5 {
             splitter.started_level = level_str.to_string();
-            return true;
+            return Some(true);
         }
     } else if settings.any_level || level_str == "010" {
         if load_indicator == 0 && theatertime > 15 && theatertime < 30 {
             splitter.started_level = level_str.to_string();
-            return true;
+            return Some(true);
         } else if splitter.h3_reset_flag && level_str == "010" && tickcounter > 0 && tickcounter < 15 && tickcounter > tickcounter_old {
             splitter.started_level = level_str.to_string();
-            return true;
+            return Some(true);
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_start_h4(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = match current!(state.h4_levelname) {
-        Some(l) => l,
-        None => return false,
-    };
-    let level_str = level.validate_utf8().unwrap_or_default();
+fn should_start_h4(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h4_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
 
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
+    let igt_float = current!(state.mcc_igt_float)?;
 
     if (settings.il_mode || settings.any_level || level_str == "m10") && igt_float > 0.167 && igt_float < 0.5 {
         splitter.started_level = level_str.to_string();
-        return true;
+        return Some(true);
     }
 
-    false
+    Some(false)
 }
 
-fn should_start_odst(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = match current!(state.odst_levelname) {
-        Some(l) => l,
-        None => return false,
-    };
-    let level_str = level.validate_utf8().unwrap_or_default();
-    let streets = current!(state.odst_streets).unwrap_or(0);
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
+fn should_start_odst(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.odst_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
+    let streets = current!(state.odst_streets)?;
+    let igt_float = current!(state.mcc_igt_float)?;
 
     if (settings.il_mode || settings.any_level || (level_str == "h100" && streets == 0)) && igt_float > 0.167 && igt_float < 0.5 {
         splitter.started_level = level_str.to_string();
         splitter.started_scene = streets;
-        return true;
+        return Some(true);
     }
 
-    false
+    Some(false)
 }
 
-fn should_start_hr(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = match current!(state.hr_levelname) {
-        Some(l) => l,
-        None => return false,
-    };
-    let level_str = level.validate_utf8().unwrap_or_default();
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
+fn should_start_hr(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.hr_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
+    let igt_float = current!(state.mcc_igt_float)?;
 
     if (settings.il_mode || settings.any_level || level_str == "m10") && igt_float > 0.167 && igt_float < 0.5 {
         splitter.started_level = level_str.to_string();
-        return true;
+        return Some(true);
     }
 
-    false
+    Some(false)
 }
-
 fn should_reset(state: &GameState, settings: &Settings, splitter: &SplitterState, current_game: MCCGame, menu_indicator: u8) -> bool {
     if settings.loop_mode {
         return false;
@@ -1383,27 +1365,28 @@ fn should_reset(state: &GameState, settings: &Settings, splitter: &SplitterState
     }
 
     match current_game {
-        MCCGame::Halo1 => should_reset_h1(state, settings, splitter),
-        MCCGame::Halo2 => should_reset_h2(state, settings, splitter),
-        MCCGame::Halo3 => should_reset_h3(state, settings, splitter),
-        MCCGame::Halo4 => should_reset_h4(state, settings, splitter),
-        MCCGame::ODST => should_reset_odst(state, settings, splitter),
-        MCCGame::Reach => should_reset_hr(state, settings, splitter),
+        MCCGame::Halo1 => should_reset_h1(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo2 => should_reset_h2(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo3 => should_reset_h3(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo4 => should_reset_h4(state, settings, splitter).unwrap_or(false),
+        MCCGame::ODST => should_reset_odst(state, settings, splitter).unwrap_or(false),
+        MCCGame::Reach => should_reset_hr(state, settings, splitter).unwrap_or(false),
         _ => false,
     }
 }
 
-fn should_reset_h1(state: &GameState, settings: &Settings, splitter: &SplitterState) -> bool {
-    if splitter.started_game != MCCGame::Halo1 || asr::timer::state() == TimerState::Ended {
-        return false;
+fn should_reset_h1(state: &GameState, settings: &Settings, splitter: &SplitterState) -> Option<bool> {
+    if splitter.started_game != MCCGame::Halo1 {
+        return Some(false);
     }
 
-    let level = current!(state.h1_levelname).unwrap_or_default();
-    let igt = current!(state.h1_igt).unwrap_or(0);
-    let igt_old = old!(state.h1_igt).unwrap_or(0);
-    let tickcounter = current!(state.h1_tickcounter).unwrap_or(0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+    let level = current!(state.h1_levelname)?;
+    let level_str = level.validate_utf8().ok()?;
+    let igt = current!(state.h1_igt)?;
+    let igt_old = old!(state.h1_igt)?;
+    let tickcounter = current!(state.h1_tickcounter)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let load_indicator_old = old!(state.mcc_loadindicator)?;
 
     let target_level = if settings.il_mode || settings.any_level {
         splitter.started_level.as_str()
@@ -1411,76 +1394,78 @@ fn should_reset_h1(state: &GameState, settings: &Settings, splitter: &SplitterSt
         "a10"
     };
 
-    if level.validate_utf8().unwrap_or_default() == target_level {
-        return (igt < igt_old && igt < 10) || (load_indicator == 0 && load_indicator_old == 1 && tickcounter < 60);
+    if level_str == target_level {
+        return Some((igt < igt_old && igt < 10) || (load_indicator == 0 && load_indicator_old == 1 && tickcounter < 60));
     }
 
-    false
+    Some(false)
 }
 
-fn should_reset_h2(state: &GameState, settings: &Settings, splitter: &SplitterState) -> bool {
-    if splitter.started_game != MCCGame::Halo2 || asr::timer::state() == TimerState::Ended {
-        return false;
+fn should_reset_h2(state: &GameState, settings: &Settings, splitter: &SplitterState) -> Option<bool> {
+    if splitter.started_game != MCCGame::Halo2 {
+        return Some(false);
     }
 
-    let level = current!(state.h2_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let igt = current!(state.h2_igt).unwrap_or(0);
-    let igt_old = old!(state.h2_igt).unwrap_or(0);
-    let tickcounter = current!(state.h2_tickcounter).unwrap_or(0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+    let level = current!(state.h2_levelname)?.validate_utf8().ok()?.to_string();
+    let igt = current!(state.h2_igt)?;
+    let igt_old = old!(state.h2_igt)?;
+    let tickcounter = current!(state.h2_tickcounter)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let load_indicator_old = old!(state.mcc_loadindicator)?;
 
     if settings.il_mode || settings.any_level {
         if level == splitter.started_level.as_str() {
-            return (igt < igt_old && igt < 10) || (load_indicator == 1 && igt == 0);
+            return Some((igt < igt_old && igt < 10) || (load_indicator == 1 && igt == 0));
         }
     } else {
         if level == "01a" || (level == "01b" && splitter.started_level.as_str() != "01a") || level == "00a" {
-            return (igt < igt_old && igt < 10) || (load_indicator == 0 && load_indicator_old == 1 && tickcounter < 60);
+            return Some((igt < igt_old && igt < 10) || (load_indicator == 0 && load_indicator_old == 1 && tickcounter < 60));
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_reset_h3(state: &GameState, settings: &Settings, splitter: &SplitterState) -> bool {
-    if splitter.started_game != MCCGame::Halo3 || asr::timer::state() == TimerState::Ended {
-        return false;
+fn should_reset_h3(state: &GameState, settings: &Settings, splitter: &SplitterState) -> Option<bool> {
+    if splitter.started_game != MCCGame::Halo3 {
+        return Some(false);
     }
 
-    let level = current!(state.h3_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let igt_float_old = old!(state.mcc_igt_float).unwrap_or(0.0);
-    let theatertime = current!(state.h3_theatertime).unwrap_or(0);
-    let tickcounter = current!(state.h3_tickcounter).unwrap_or(0);
-    let tickcounter_old = old!(state.h3_tickcounter).unwrap_or(0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+    let level = current!(state.h3_levelname)?.validate_utf8().ok()?.to_string();
+    let igt_float = current!(state.mcc_igt_float)?;
+    let igt_float_old = old!(state.mcc_igt_float)?;
+    let theatertime = current!(state.h3_theatertime)?;
+    let tickcounter = current!(state.h3_tickcounter)?;
+    let tickcounter_old = old!(state.h3_tickcounter)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let load_indicator_old = old!(state.mcc_loadindicator)?;
 
     if settings.il_mode {
-        return level == splitter.started_level.as_str() && igt_float < igt_float_old && igt_float < 0.167;
+        return Some(level == splitter.started_level.as_str() && igt_float < igt_float_old && igt_float < 0.167);
     } else {
         if settings.any_level {
-            return level == splitter.started_level.as_str() && theatertime > 0 && theatertime < 15;
+            return Some(level == splitter.started_level.as_str() && theatertime > 0 && theatertime < 15);
         } else if level == "005" {
-            return load_indicator == 0 && load_indicator_old == 1 && tickcounter < 60;
+            return Some(load_indicator == 0 && load_indicator_old == 1 && tickcounter < 60);
         } else if level == "010" {
-            return (theatertime > 0 && theatertime < 15) || (theatertime >= 15 && tickcounter < tickcounter_old && tickcounter < 10 && load_indicator == 0);
+            return Some(
+                (theatertime > 0 && theatertime < 15) || (theatertime >= 15 && tickcounter < tickcounter_old && tickcounter < 10 && load_indicator == 0),
+            );
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_reset_h4(state: &GameState, settings: &Settings, splitter: &SplitterState) -> bool {
-    if splitter.started_game != MCCGame::Halo4 || asr::timer::state() == TimerState::Ended {
-        return false;
+fn should_reset_h4(state: &GameState, settings: &Settings, splitter: &SplitterState) -> Option<bool> {
+    if splitter.started_game != MCCGame::Halo4 {
+        return Some(false);
     }
 
-    let level = current!(state.h4_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let igt_float_old = old!(state.mcc_igt_float).unwrap_or(0.0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
+    let level = current!(state.h4_levelname)?.validate_utf8().ok()?.to_string();
+    let igt_float = current!(state.mcc_igt_float)?;
+    let igt_float_old = old!(state.mcc_igt_float)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
 
     let target_level = if settings.il_mode || settings.any_level {
         splitter.started_level.as_str()
@@ -1489,45 +1474,45 @@ fn should_reset_h4(state: &GameState, settings: &Settings, splitter: &SplitterSt
     };
 
     if level == target_level {
-        return (igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0);
+        return Some((igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0));
     }
 
-    false
+    Some(false)
 }
 
-fn should_reset_odst(state: &GameState, settings: &Settings, splitter: &SplitterState) -> bool {
-    if splitter.started_game != MCCGame::ODST || asr::timer::state() == TimerState::Ended {
-        return false;
+fn should_reset_odst(state: &GameState, settings: &Settings, splitter: &SplitterState) -> Option<bool> {
+    if splitter.started_game != MCCGame::ODST {
+        return Some(false);
     }
 
-    let level = current!(state.odst_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let streets = current!(state.odst_streets).unwrap_or(0);
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let igt_float_old = old!(state.mcc_igt_float).unwrap_or(0.0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
+    let level = current!(state.odst_levelname)?.validate_utf8().ok()?.to_string();
+    let streets = current!(state.odst_streets)?;
+    let igt_float = current!(state.mcc_igt_float)?;
+    let igt_float_old = old!(state.mcc_igt_float)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
 
     if settings.any_level || settings.il_mode {
         if level == splitter.started_level.as_str() && splitter.started_scene == streets {
-            return (igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0);
+            return Some((igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0));
         }
     } else {
         if level == "c100" || (level == "h100" && streets == 0) {
-            return (igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0);
+            return Some((igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0));
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_reset_hr(state: &GameState, settings: &Settings, splitter: &SplitterState) -> bool {
-    if splitter.started_game != MCCGame::Reach || asr::timer::state() == TimerState::Ended {
-        return false;
+fn should_reset_hr(state: &GameState, settings: &Settings, splitter: &SplitterState) -> Option<bool> {
+    if splitter.started_game != MCCGame::Reach {
+        return Some(false);
     }
 
-    let level = current!(state.hr_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let igt_float_old = old!(state.mcc_igt_float).unwrap_or(0.0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
+    let level = current!(state.hr_levelname)?.validate_utf8().ok()?.to_string();
+    let igt_float = current!(state.mcc_igt_float)?;
+    let igt_float_old = old!(state.mcc_igt_float)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
 
     let target_level = if settings.il_mode || settings.any_level {
         splitter.started_level.as_str()
@@ -1536,10 +1521,10 @@ fn should_reset_hr(state: &GameState, settings: &Settings, splitter: &SplitterSt
     };
 
     if level == target_level {
-        return (igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0);
+        return Some((igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0));
     }
 
-    false
+    Some(false)
 }
 
 fn should_split(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame, menu_indicator: u8) -> bool {
@@ -1569,22 +1554,22 @@ fn should_split(state: &GameState, settings: &Settings, splitter: &mut SplitterS
     }
 
     match current_game {
-        MCCGame::Halo1 => should_split_h1(state, settings, splitter),
-        MCCGame::Halo2 => should_split_h2(state, settings, splitter),
-        MCCGame::Halo3 => should_split_h3(state, settings, splitter),
-        MCCGame::Halo4 => should_split_h4(state, settings, splitter),
-        MCCGame::ODST => should_split_odst(state, settings, splitter),
-        MCCGame::Reach => should_split_hr(state, settings, splitter),
+        MCCGame::Halo1 => should_split_h1(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo2 => should_split_h2(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo3 => should_split_h3(state, settings, splitter).unwrap_or(false),
+        MCCGame::Halo4 => should_split_h4(state, settings, splitter).unwrap_or(false),
+        MCCGame::ODST => should_split_odst(state, settings, splitter).unwrap_or(false),
+        MCCGame::Reach => should_split_hr(state, settings, splitter).unwrap_or(false),
         _ => false,
     }
 }
 
-fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = current!(state.h1_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.h1_bspstate).unwrap_or(255);
-    let bspstate_old = old!(state.h1_bspstate).unwrap_or(255);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h1_levelname)?.validate_utf8().ok()?.to_string();
+    let bspstate = current!(state.h1_bspstate)?;
+    let bspstate_old = old!(state.h1_bspstate)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let load_indicator_old = old!(state.mcc_loadindicator)?;
 
     // BSP mode splitting
     if settings.bsp_mode && bspstate != bspstate_old {
@@ -1593,29 +1578,29 @@ fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
             if settings.bsp_cache || !splitter.contains_dirty_bsp_byte(bspstate) {
                 // Special handling for b40 and c40
                 if level == "b40" && bspstate == 0 {
-                    let ypos = current!(state.h1_ypos).unwrap_or(0.0);
+                    let ypos = current!(state.h1_ypos)?;
                     if ypos > -19.544 && ypos < -19.144 {
                         if !settings.bsp_cache {
                             splitter.add_dirty_bsp_byte(bspstate);
                         }
-                        return true;
+                        return Some(true);
                     }
-                    return false;
+                    return Some(false);
                 } else if level == "c40" && bspstate == 0 {
-                    let xpos = current!(state.h1_xpos).unwrap_or(0.0);
-                    let ypos = current!(state.h1_ypos).unwrap_or(0.0);
+                    let xpos = current!(state.h1_xpos)?;
+                    let ypos = current!(state.h1_ypos)?;
                     if xpos > 171.87326 && xpos < 185.818526 && ypos > -295.3629 && ypos < -284.356986 {
                         if !settings.bsp_cache {
                             splitter.add_dirty_bsp_byte(bspstate);
                         }
-                        return true;
+                        return Some(true);
                     }
-                    return false;
+                    return Some(false);
                 } else {
                     if !settings.bsp_cache {
                         splitter.add_dirty_bsp_byte(bspstate);
                     }
-                    return true;
+                    return Some(true);
                 }
             }
         }
@@ -1623,15 +1608,15 @@ fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
 
     // IL end splits
     if settings.il_mode && !settings.igt_mode {
-        let cinematic = current!(state.h1_cinematic).unwrap_or(false);
-        let cinematic_old = old!(state.h1_cinematic).unwrap_or(false);
-        let cutsceneskip = current!(state.h1_cutsceneskip).unwrap_or(false);
-        let cutsceneskip_old = old!(state.h1_cutsceneskip).unwrap_or(false);
-        let fadelength = current!(state.h1_fadelength).unwrap_or(0);
-        let fadebyte = current!(state.h1_fadebyte).unwrap_or(0);
-        let xpos = current!(state.h1_xpos).unwrap_or(0.0);
-        let deathflag = current!(state.h1_deathflag).unwrap_or(false);
-        let tickcounter = current!(state.h1_tickcounter).unwrap_or(0);
+        let cinematic = current!(state.h1_cinematic)?;
+        let cinematic_old = old!(state.h1_cinematic)?;
+        let cutsceneskip = current!(state.h1_cutsceneskip)?;
+        let cutsceneskip_old = old!(state.h1_cutsceneskip)?;
+        let fadelength = current!(state.h1_fadelength)?;
+        let fadebyte = current!(state.h1_fadebyte)?;
+        let xpos = current!(state.h1_xpos)?;
+        let deathflag = current!(state.h1_deathflag)?;
+        let tickcounter = current!(state.h1_tickcounter)?;
 
         let should_split = match level.as_str() {
             "a10" => bspstate == 6 && !cutsceneskip_old && cutsceneskip,
@@ -1652,7 +1637,7 @@ fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
             if settings.loop_mode {
                 splitter.loading = true;
             }
-            return true;
+            return Some(true);
         }
     }
 
@@ -1660,26 +1645,26 @@ fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
     if !settings.il_mode && !settings.igt_mode {
         if load_indicator == 1 && load_indicator_old == 0 {
             splitter.clear_dirty_bsps();
-            return true;
+            return Some(true);
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_split_h2(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = current!(state.h2_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.h2_bspstate).unwrap_or(255);
-    let bspstate_old = old!(state.h2_bspstate).unwrap_or(255);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+fn should_split_h2(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h2_levelname)?.validate_utf8().ok()?.to_string();
+    let bspstate = current!(state.h2_bspstate)?;
+    let bspstate_old = old!(state.h2_bspstate)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let load_indicator_old = old!(state.mcc_loadindicator)?;
 
     // BSP mode
     if settings.bsp_mode && bspstate != bspstate_old {
         if settings.bsp_cache {
             let bsp_list = get_h2_bsp_list(&level);
             if bsp_list.contains(&bspstate) {
-                return true;
+                return Some(true);
             }
         } else {
             // Special TGJ handling
@@ -1693,20 +1678,20 @@ fn should_split_h2(state: &GameState, settings: &Settings, splitter: &mut Splitt
                     let bsp_list = get_h2_bsp_list(&level);
                     if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_byte(bspstate) {
                         if bspstate == 0 && !splitter.contains_dirty_bsp_byte(2) {
-                            return false;
+                            return Some(false);
                         }
                         splitter.add_dirty_bsp_byte(bspstate);
-                        return true;
+                        return Some(true);
                     }
                 }
                 "04a" => {
                     let bsp_list = get_h2_bsp_list(&level);
                     if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_byte(bspstate) {
                         if bspstate == 0 && !splitter.contains_dirty_bsp_byte(3) {
-                            return false;
+                            return Some(false);
                         }
                         splitter.add_dirty_bsp_byte(bspstate);
-                        return true;
+                        return Some(true);
                     }
                 }
                 "04b" => {
@@ -1716,27 +1701,27 @@ fn should_split_h2(state: &GameState, settings: &Settings, splitter: &mut Splitt
                     let bsp_list = get_h2_bsp_list(&level);
                     if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_byte(bspstate) {
                         if bspstate == 0 && splitter.contains_dirty_bsp_byte(3) {
-                            return true;
+                            return Some(true);
                         }
                         splitter.add_dirty_bsp_byte(bspstate);
-                        return true;
+                        return Some(true);
                     }
                 }
                 "08a" => {
                     let bsp_list = get_h2_bsp_list(&level);
                     if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_byte(bspstate) {
                         if bspstate == 0 && !splitter.contains_dirty_bsp_byte(1) {
-                            return false;
+                            return Some(false);
                         }
                         splitter.add_dirty_bsp_byte(bspstate);
-                        return true;
+                        return Some(true);
                     }
                 }
                 _ => {
                     let bsp_list = get_h2_bsp_list(&level);
                     if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_byte(bspstate) {
                         splitter.add_dirty_bsp_byte(bspstate);
-                        return true;
+                        return Some(true);
                     }
                 }
             }
@@ -1747,69 +1732,69 @@ fn should_split_h2(state: &GameState, settings: &Settings, splitter: &mut Splitt
     if !(settings.il_mode || settings.igt_mode) {
         if load_indicator == 1 && load_indicator_old == 0 && level != "00a" {
             splitter.clear_dirty_bsps();
-            return true;
+            return Some(true);
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_split_h2_tgj(state: &GameState, splitter: &mut SplitterState) -> bool {
-    let bspstate = current!(state.h2_bspstate).unwrap_or(255);
-    let bspstate_old = old!(state.h2_bspstate).unwrap_or(255);
+fn should_split_h2_tgj(state: &GameState, splitter: &mut SplitterState) -> Option<bool> {
+    let bspstate = current!(state.h2_bspstate)?;
+    let bspstate_old = old!(state.h2_bspstate)?;
 
     if bspstate == bspstate_old {
-        return false;
+        return Some(false);
     }
 
-    let xpos = current!(state.h2_xpos).unwrap_or(0.0);
-    let ypos = current!(state.h2_ypos).unwrap_or(0.0);
+    let xpos = current!(state.h2_xpos)?;
+    let ypos = current!(state.h2_ypos)?;
 
     match bspstate {
         1 => {
             // First transition to BSP 1: near start
             if !splitter.contains_dirty_bsp_byte(1) && xpos > -2.0 && xpos < 5.0 && ypos > -35.0 && ypos < -15.0 {
                 splitter.add_dirty_bsp_byte(1);
-                return true;
+                return Some(true);
             }
             // Third transition to BSP 1: after BSP 10
             else if !splitter.contains_dirty_bsp_byte(21) && splitter.contains_dirty_bsp_byte(10) && xpos > 15.0 && xpos < 25.0 && ypos > 15.0 && ypos < 30.0
             {
                 splitter.add_dirty_bsp_byte(21);
-                return true;
+                return Some(true);
             }
         }
         0 => {
             // Second transition to BSP 0
             if !splitter.contains_dirty_bsp_byte(10) && xpos > -20.0 && xpos < -10.0 && ypos > 20.0 && ypos < 30.0 {
                 splitter.add_dirty_bsp_byte(10);
-                return true;
+                return Some(true);
             }
             // Fourth transition to BSP 0: after BSP 21
             else if !splitter.contains_dirty_bsp_byte(20) && splitter.contains_dirty_bsp_byte(21) && xpos > 45.0 && xpos < 55.0 && ypos > -5.0 && ypos < 10.0
             {
                 splitter.add_dirty_bsp_byte(20);
-                return true;
+                return Some(true);
             }
         }
         3 => {
             if !splitter.contains_dirty_bsp_byte(3) {
                 splitter.add_dirty_bsp_byte(3);
-                return true;
+                return Some(true);
             }
         }
         _ => {}
     }
 
-    false
+    Some(false)
 }
 
-fn should_split_h3(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = current!(state.h3_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.h3_bspstate).unwrap_or(0);
-    let bspstate_old = old!(state.h3_bspstate).unwrap_or(0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+fn should_split_h3(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h3_levelname)?.validate_utf8().ok()?.to_string();
+    let bspstate = current!(state.h3_bspstate)?;
+    let bspstate_old = old!(state.h3_bspstate)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let load_indicator_old = old!(state.mcc_loadindicator)?;
 
     // BSP mode
     if settings.bsp_mode && bspstate != bspstate_old {
@@ -1817,12 +1802,12 @@ fn should_split_h3(state: &GameState, settings: &Settings, splitter: &mut Splitt
 
         if settings.bsp_cache {
             if bsp_list.contains(&bspstate) {
-                return true;
+                return Some(true);
             }
         } else {
             if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_long(bspstate) {
                 splitter.add_dirty_bsp_long(bspstate);
-                return true;
+                return Some(true);
             }
         }
     }
@@ -1831,26 +1816,26 @@ fn should_split_h3(state: &GameState, settings: &Settings, splitter: &mut Splitt
     if !settings.il_mode {
         if load_indicator == 1 && load_indicator_old == 0 {
             splitter.clear_dirty_bsps();
-            return true;
+            return Some(true);
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_split_h4(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = current!(state.h4_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.h4_bspstate).unwrap_or(0);
-    let bspstate_old = old!(state.h4_bspstate).unwrap_or(0);
-    let comptimerstate = current!(state.mcc_comptimerstate).unwrap_or(0);
-    let comptimerstate_old = old!(state.mcc_comptimerstate).unwrap_or(0);
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let pgcr_indicator = current!(state.mcc_pgcrindicator).unwrap_or(0);
+fn should_split_h4(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.h4_levelname)?.validate_utf8().ok()?.to_string();
+    let bspstate = current!(state.h4_bspstate)?;
+    let bspstate_old = old!(state.h4_bspstate)?;
+    let comptimerstate = current!(state.mcc_comptimerstate)?;
+    let comptimerstate_old = old!(state.mcc_comptimerstate)?;
+    let igt_float = current!(state.mcc_igt_float)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let pgcr_indicator = current!(state.mcc_pgcrindicator)?;
 
     if settings.comp_splits {
         if load_indicator == 0 && pgcr_indicator == 0 && comptimerstate != comptimerstate_old && comptimerstate != 0 && igt_float > 2.0 {
-            return true;
+            return Some(true);
         }
     } else if settings.bsp_mode && bspstate != bspstate_old {
         let bsp_list = get_h4_bsp_list(&level);
@@ -1858,28 +1843,28 @@ fn should_split_h4(state: &GameState, settings: &Settings, splitter: &mut Splitt
         // H4 uses inverted check - split if NOT in list
         if settings.bsp_cache {
             if !bsp_list.contains(&bspstate) {
-                return true;
+                return Some(true);
             }
         } else {
             if !bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_long(bspstate) {
                 splitter.add_dirty_bsp_long(bspstate);
-                return true;
+                return Some(true);
             }
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_split_odst(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = current!(state.odst_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.odst_bspstate).unwrap_or(0);
-    let bspstate_old = old!(state.odst_bspstate).unwrap_or(0);
-    let comptimerstate = current!(state.mcc_comptimerstate).unwrap_or(0);
-    let comptimerstate_old = old!(state.mcc_comptimerstate).unwrap_or(0);
-    let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let pgcr_indicator = current!(state.mcc_pgcrindicator).unwrap_or(0);
+fn should_split_odst(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.odst_levelname)?.validate_utf8().ok()?.to_string();
+    let bspstate = current!(state.odst_bspstate)?;
+    let bspstate_old = old!(state.odst_bspstate)?;
+    let comptimerstate = current!(state.mcc_comptimerstate)?;
+    let comptimerstate_old = old!(state.mcc_comptimerstate)?;
+    let igt_float = current!(state.mcc_igt_float)?;
+    let load_indicator = current!(state.mcc_loadindicator)?;
+    let pgcr_indicator = current!(state.mcc_pgcrindicator)?;
 
     if settings.comp_splits {
         let invalid_state = if level == "l300" { 876414390 } else { 0 };
@@ -1890,7 +1875,7 @@ fn should_split_odst(state: &GameState, settings: &Settings, splitter: &mut Spli
             && comptimerstate != 0
             && igt_float > 2.0
         {
-            return true;
+            return Some(true);
         }
     } else if settings.bsp_mode && bspstate != bspstate_old {
         let bsp_list = get_odst_bsp_list(&level);
@@ -1898,47 +1883,47 @@ fn should_split_odst(state: &GameState, settings: &Settings, splitter: &mut Spli
         if igt_float > 0.5 {
             if settings.bsp_cache {
                 if bsp_list.contains(&bspstate) {
-                    return true;
+                    return Some(true);
                 }
             } else {
                 if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_int(bspstate) {
                     splitter.add_dirty_bsp_int(bspstate);
-                    return true;
+                    return Some(true);
                 }
             }
         }
     }
 
-    false
+    Some(false)
 }
 
-fn should_split_hr(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> bool {
-    let level = current!(state.hr_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-    let bspstate = current!(state.hr_bspstate).unwrap_or(0);
-    let bspstate_old = old!(state.hr_bspstate).unwrap_or(0);
+fn should_split_hr(state: &GameState, settings: &Settings, splitter: &mut SplitterState) -> Option<bool> {
+    let level = current!(state.hr_levelname)?.validate_utf8().ok()?.to_string();
+    let bspstate = current!(state.hr_bspstate)?;
+    let bspstate_old = old!(state.hr_bspstate)?;
 
     if settings.bsp_mode && bspstate != bspstate_old {
         let bsp_list = get_hr_bsp_list(&level);
 
         if settings.bsp_cache {
             if bsp_list.contains(&bspstate) {
-                return true;
+                return Some(true);
             }
         } else {
             if bsp_list.contains(&bspstate) && !splitter.contains_dirty_bsp_int(bspstate) {
                 splitter.add_dirty_bsp_int(bspstate);
-                return true;
+                return Some(true);
             }
         }
     }
 
-    false
+    Some(false)
 }
 
 fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame, menu_indicator: u8, load_indicator: u8) {
     // Check for multigame pause/resume
     if !splitter.multigame_pause && !settings.il_mode {
-        if check_multigame_pause(state, settings, splitter, current_game) {
+        if check_multigame_pause(state, settings, splitter, current_game).unwrap_or(false) {
             splitter.multigame_pause = true;
 
             // Store current game time for multigame (we track it ourselves)
@@ -1955,7 +1940,7 @@ fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut Splitte
             }
         }
     } else if splitter.multigame_pause {
-        if check_multigame_resume(state, current_game) {
+        if check_multigame_resume(state, current_game).unwrap_or(false) {
             splitter.multigame_pause = false;
         }
     }
@@ -1987,7 +1972,6 @@ fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut Splitte
         update_game_time(state, settings, splitter, current_game);
     }
 }
-
 fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame) {
     // TODO: This is all super borked
 
@@ -2001,37 +1985,41 @@ fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut Split
         return;
     }
 
-    let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-    let pgcr_indicator = current!(state.mcc_pgcrindicator).unwrap_or(0);
-    let pgcr_indicator_old = old!(state.mcc_pgcrindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+    let Some(load_indicator) = current!(state.mcc_loadindicator) else { return };
+    let Some(load_indicator_old) = old!(state.mcc_loadindicator) else { return };
+    let Some(pgcr_indicator) = current!(state.mcc_pgcrindicator) else { return };
+    let Some(pgcr_indicator_old) = old!(state.mcc_pgcrindicator) else { return };
 
     // Get IGT and tickrate based on game
     let (igt, igt_old, tickrate): (u32, u32, u8) = match current_game {
         MCCGame::Halo1 => {
-            let igt = current!(state.h1_igt).unwrap_or(0);
-            let igt_old = old!(state.h1_igt).unwrap_or(0);
+            let Some(igt) = current!(state.h1_igt) else { return };
+            let Some(igt_old) = old!(state.h1_igt) else { return };
             (igt, igt_old, 30)
         }
         MCCGame::Halo2 => {
-            let igt = current!(state.h2_igt).unwrap_or(0);
-            let igt_old = old!(state.h2_igt).unwrap_or(0);
+            let Some(igt) = current!(state.h2_igt) else { return };
+            let Some(igt_old) = old!(state.h2_igt) else { return };
             (igt, igt_old, 60)
         }
         MCCGame::Halo3 => {
             if settings.il_mode {
-                let igt = (current!(state.mcc_igt_float).unwrap_or(0.0) * 60.0).round() as u32;
-                let igt_old = (old!(state.mcc_igt_float).unwrap_or(0.0) * 60.0).round() as u32;
+                let Some(igt_float) = current!(state.mcc_igt_float) else { return };
+                let Some(igt_float_old) = old!(state.mcc_igt_float) else { return };
+                let igt = (igt_float * 60.0).round() as u32;
+                let igt_old = (igt_float_old * 60.0).round() as u32;
                 (igt, igt_old, 60)
             } else {
-                let igt = current!(state.h3_theatertime).unwrap_or(0);
-                let igt_old = old!(state.h3_theatertime).unwrap_or(0);
+                let Some(igt) = current!(state.h3_theatertime) else { return };
+                let Some(igt_old) = old!(state.h3_theatertime) else { return };
                 (igt, igt_old, 60)
             }
         }
         MCCGame::Halo4 | MCCGame::ODST | MCCGame::Reach => {
-            let igt = (current!(state.mcc_igt_float).unwrap_or(0.0) * 60.0).round() as u32;
-            let igt_old = (old!(state.mcc_igt_float).unwrap_or(0.0) * 60.0).round() as u32;
+            let Some(igt_float) = current!(state.mcc_igt_float) else { return };
+            let Some(igt_float_old) = old!(state.mcc_igt_float) else { return };
+            let igt = (igt_float * 60.0).round() as u32;
+            let igt_old = (igt_float_old * 60.0).round() as u32;
             (igt, igt_old, 60)
         }
         _ => return,
@@ -2090,12 +2078,13 @@ fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut Split
 }
 
 fn handle_h1_loading(state: &GameState, splitter: &mut SplitterState, load_indicator: u8) {
-    let menu_indicator = current!(state.mcc_menuindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
-    let gamewon = current!(state.h1_gamewon).unwrap_or(false);
-    let gamewon_old = old!(state.h1_gamewon).unwrap_or(false);
-    let tickcounter = current!(state.h1_tickcounter).unwrap_or(0);
-    let tickcounter_old = old!(state.h1_tickcounter).unwrap_or(0);
+    let Some(menu_indicator) = current!(state.mcc_menuindicator) else { return };
+    let Some(load_indicator_old) = old!(state.mcc_loadindicator) else { return };
+    let Some(gamewon) = current!(state.h1_gamewon) else { return };
+    let Some(gamewon_old) = old!(state.h1_gamewon) else { return };
+    let Some(tickcounter) = current!(state.h1_tickcounter) else { return };
+    let Some(tickcounter_old) = old!(state.h1_tickcounter) else { return };
+
     if !splitter.loading {
         if menu_indicator == 1 {
             if gamewon && !gamewon_old {
@@ -2110,18 +2099,19 @@ fn handle_h1_loading(state: &GameState, splitter: &mut SplitterState, load_indic
         }
     }
 }
+
 fn handle_h2_loading(state: &GameState, splitter: &mut SplitterState, load_indicator: u8) {
     // TODO: This is broken and doesn't take into account internal cutscenes
 
-    let menu_indicator = current!(state.mcc_menuindicator).unwrap_or(0);
-    let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
-    let fadebyte = current!(state.h2_fadebyte).unwrap_or(0);
-    let fadebyte_old = old!(state.h2_fadebyte).unwrap_or(0);
-    let letterbox = current!(state.h2_letterbox).unwrap_or(0.0);
-    let letterbox_old = old!(state.h2_letterbox).unwrap_or(0.0);
-    let tickcounter = current!(state.h2_tickcounter).unwrap_or(0);
-    let bspstate = current!(state.h2_bspstate).unwrap_or(255);
-    let pause_indicator = current!(state.mcc_pauseindicator).unwrap_or(0);
+    let Some(menu_indicator) = current!(state.mcc_menuindicator) else { return };
+    let Some(load_indicator_old) = old!(state.mcc_loadindicator) else { return };
+    let Some(fadebyte) = current!(state.h2_fadebyte) else { return };
+    let Some(fadebyte_old) = old!(state.h2_fadebyte) else { return };
+    let Some(letterbox) = current!(state.h2_letterbox) else { return };
+    let Some(letterbox_old) = old!(state.h2_letterbox) else { return };
+    let Some(tickcounter) = current!(state.h2_tickcounter) else { return };
+    let Some(bspstate) = current!(state.h2_bspstate) else { return };
+    let Some(pause_indicator) = current!(state.mcc_pauseindicator) else { return };
 
     if !splitter.loading {
         if menu_indicator == 1 {
@@ -2144,130 +2134,133 @@ fn handle_h2_loading(state: &GameState, splitter: &mut SplitterState, load_indic
         }
     }
 }
-
-fn check_multigame_pause(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame) -> bool {
+fn check_multigame_pause(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame) -> Option<bool> {
     if settings.il_mode || settings.any_level {
-        return false;
+        return Some(false);
     }
 
     match current_game {
         MCCGame::Halo1 => {
             // H1 - PoA ending
-            let level = current!(state.h1_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let cinematic = current!(state.h1_cinematic).unwrap_or(false);
-            let cinematic_old = old!(state.h1_cinematic).unwrap_or(false);
-            let cutsceneskip = current!(state.h1_cutsceneskip).unwrap_or(false);
-            let xpos = current!(state.h1_xpos).unwrap_or(0.0);
-            let deathflag = current!(state.h1_deathflag).unwrap_or(false);
+            let level = current!(state.h1_levelname)?.validate_utf8().ok()?.to_string();
+            let cinematic = current!(state.h1_cinematic)?;
+            let cinematic_old = old!(state.h1_cinematic)?;
+            let cutsceneskip = current!(state.h1_cutsceneskip)?;
+            let xpos = current!(state.h1_xpos)?;
+            let deathflag = current!(state.h1_deathflag)?;
 
-            level == "d40" && !cinematic_old && cinematic && !cutsceneskip && xpos > 1000.0 && !deathflag
+            Some(level == "d40" && !cinematic_old && cinematic && !cutsceneskip && xpos > 1000.0 && !deathflag)
         }
         MCCGame::Halo2 => {
             // H2 - TGJ ending
-            let level = current!(state.h2_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let fadebyte = current!(state.h2_fadebyte).unwrap_or(0);
-            let letterbox = current!(state.h2_letterbox).unwrap_or(0.0);
-            let letterbox_old = old!(state.h2_letterbox).unwrap_or(0.0);
-            let tickcounter = current!(state.h2_tickcounter).unwrap_or(0);
+            let level = current!(state.h2_levelname)?.validate_utf8().ok()?.to_string();
+            let fadebyte = current!(state.h2_fadebyte)?;
+            let letterbox = current!(state.h2_letterbox)?;
+            let letterbox_old = old!(state.h2_letterbox)?;
+            let tickcounter = current!(state.h2_tickcounter)?;
 
-            level == "08b"
-                && fadebyte == 1
-                && letterbox > 0.96
-                && letterbox_old <= 0.96
-                && letterbox_old != 0.0
-                && splitter.h2_tgj_ready_flag
-                && tickcounter > (splitter.h2_tgj_ready_time + 300)
+            Some(
+                level == "08b"
+                    && fadebyte == 1
+                    && letterbox > 0.96
+                    && letterbox_old <= 0.96
+                    && letterbox_old != 0.0
+                    && splitter.h2_tgj_ready_flag
+                    && tickcounter > (splitter.h2_tgj_ready_time + 300),
+            )
         }
         MCCGame::Halo3 => {
             // H3 - Halo ending
-            let level = current!(state.h3_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
-            let load_indicator_old = old!(state.mcc_loadindicator).unwrap_or(0);
+            let level = current!(state.h3_levelname)?.validate_utf8().ok()?.to_string();
+            let load_indicator = current!(state.mcc_loadindicator)?;
+            let load_indicator_old = old!(state.mcc_loadindicator)?;
 
-            load_indicator == 1 && load_indicator_old == 0 && level == "130"
+            Some(load_indicator == 1 && load_indicator_old == 0 && level == "130")
         }
         MCCGame::Halo4 => {
             // H4 - Midnight ending
-            let level = current!(state.h4_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let pgcr = current!(state.mcc_pgcrindicator).unwrap_or(0);
-            let pgcr_old = old!(state.mcc_pgcrindicator).unwrap_or(0);
+            let level = current!(state.h4_levelname)?.validate_utf8().ok()?.to_string();
+            let pgcr = current!(state.mcc_pgcrindicator)?;
+            let pgcr_old = old!(state.mcc_pgcrindicator)?;
 
-            pgcr == 1 && pgcr_old == 0 && level == "m90"
+            Some(pgcr == 1 && pgcr_old == 0 && level == "m90")
         }
         MCCGame::ODST => {
             // ODST - Coastal ending
-            let level = current!(state.odst_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let pgcr = current!(state.mcc_pgcrindicator).unwrap_or(0);
-            let pgcr_old = old!(state.mcc_pgcrindicator).unwrap_or(0);
+            let level = current!(state.odst_levelname)?.validate_utf8().ok()?.to_string();
+            let pgcr = current!(state.mcc_pgcrindicator)?;
+            let pgcr_old = old!(state.mcc_pgcrindicator)?;
 
-            pgcr == 1 && pgcr_old == 0 && level == "l300"
+            Some(pgcr == 1 && pgcr_old == 0 && level == "l300")
         }
         MCCGame::Reach => {
             // Reach - PoA ending
-            let level = current!(state.hr_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let pgcr = current!(state.mcc_pgcrindicator).unwrap_or(0);
-            let pgcr_old = old!(state.mcc_pgcrindicator).unwrap_or(0);
+            let level = current!(state.hr_levelname)?.validate_utf8().ok()?.to_string();
+            let pgcr = current!(state.mcc_pgcrindicator)?;
+            let pgcr_old = old!(state.mcc_pgcrindicator)?;
 
-            pgcr == 1 && pgcr_old == 0 && level == "m70"
+            Some(pgcr == 1 && pgcr_old == 0 && level == "m70")
         }
-        _ => false,
+        _ => Some(false),
     }
 }
 
-fn check_multigame_resume(state: &GameState, current_game: MCCGame) -> bool {
+fn check_multigame_resume(state: &GameState, current_game: MCCGame) -> Option<bool> {
     match current_game {
         MCCGame::Halo1 => {
             // H1 - PoA start
-            let level = current!(state.h1_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let bspstate = current!(state.h1_bspstate).unwrap_or(255);
-            let xpos = current!(state.h1_xpos).unwrap_or(0.0);
-            let tickcounter = current!(state.h1_tickcounter).unwrap_or(0);
-            let cinematic = current!(state.h1_cinematic).unwrap_or(false);
-            let cinematic_old = old!(state.h1_cinematic).unwrap_or(false);
+            let level = current!(state.h1_levelname)?.validate_utf8().ok()?.to_string();
+            let bspstate = current!(state.h1_bspstate)?;
+            let xpos = current!(state.h1_xpos)?;
+            let tickcounter = current!(state.h1_tickcounter)?;
+            let cinematic = current!(state.h1_cinematic)?;
+            let cinematic_old = old!(state.h1_cinematic)?;
 
-            level == "a10" && bspstate == 0 && xpos < -55.0 && tickcounter > 280 && !cinematic && cinematic_old
+            Some(level == "a10" && bspstate == 0 && xpos < -55.0 && tickcounter > 280 && !cinematic && cinematic_old)
         }
         MCCGame::Halo2 => {
             // H2 - Armory/Cairo start
-            let level = current!(state.h2_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let tickcounter = current!(state.h2_tickcounter).unwrap_or(0);
-            let fadebyte = current!(state.h2_fadebyte).unwrap_or(0);
-            let fadebyte_old = old!(state.h2_fadebyte).unwrap_or(0);
-            let load_indicator = current!(state.mcc_loadindicator).unwrap_or(0);
+            let level = current!(state.h2_levelname)?.validate_utf8().ok()?.to_string();
+            let tickcounter = current!(state.h2_tickcounter)?;
+            let fadebyte = current!(state.h2_fadebyte)?;
+            let fadebyte_old = old!(state.h2_fadebyte)?;
+            let load_indicator = current!(state.mcc_loadindicator)?;
 
-            (level == "01a" && tickcounter >= 26 && tickcounter < 30)
-                || (level == "01b" && load_indicator == 0 && fadebyte == 0 && fadebyte_old == 1 && tickcounter < 30)
+            Some(
+                (level == "01a" && tickcounter >= 26 && tickcounter < 30)
+                    || (level == "01b" && load_indicator == 0 && fadebyte == 0 && fadebyte_old == 1 && tickcounter < 30),
+            )
         }
         MCCGame::Halo3 => {
             // H3 - Sierra start
-            let level = current!(state.h3_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let theatertime = current!(state.h3_theatertime).unwrap_or(0);
+            let level = current!(state.h3_levelname)?.validate_utf8().ok()?.to_string();
+            let theatertime = current!(state.h3_theatertime)?;
 
-            level == "010" && theatertime > 15 && theatertime < 30
+            Some(level == "010" && theatertime > 15 && theatertime < 30)
         }
         MCCGame::Halo4 => {
             // H4 - Dawn start
-            let level = current!(state.h4_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
+            let level = current!(state.h4_levelname)?.validate_utf8().ok()?.to_string();
+            let igt_float = current!(state.mcc_igt_float)?;
 
-            level == "m10" && igt_float > 0.167 && igt_float < 0.5
+            Some(level == "m10" && igt_float > 0.167 && igt_float < 0.5)
         }
         MCCGame::ODST => {
             // ODST - Mombasa Streets start
-            let level = current!(state.odst_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let streets = current!(state.odst_streets).unwrap_or(0);
-            let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
+            let level = current!(state.odst_levelname)?.validate_utf8().ok()?.to_string();
+            let streets = current!(state.odst_streets)?;
+            let igt_float = current!(state.mcc_igt_float)?;
 
-            level == "h100" && streets == 0 && igt_float > 0.167 && igt_float < 0.5
+            Some(level == "h100" && streets == 0 && igt_float > 0.167 && igt_float < 0.5)
         }
         MCCGame::Reach => {
             // Reach - Winter Contingency start
-            let level = current!(state.hr_levelname).unwrap_or_default().validate_utf8().unwrap_or("").to_string();
-            let igt_float = current!(state.mcc_igt_float).unwrap_or(0.0);
+            let level = current!(state.hr_levelname)?.validate_utf8().ok()?.to_string();
+            let igt_float = current!(state.mcc_igt_float)?;
 
-            level == "m10" && igt_float > 0.167 && igt_float < 0.5
+            Some(level == "m10" && igt_float > 0.167 && igt_float < 0.5)
         }
-        _ => false,
+        _ => Some(false),
     }
 }
 
