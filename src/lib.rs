@@ -7,6 +7,7 @@ use asr::file_format::pe::FileVersion;
 use asr::time::Duration;
 use asr::timer::TimerState;
 use asr::{deep_pointer::DeepPointer, print_message, settings::Gui, string::ArrayCString, watcher::Watcher, Process};
+use asr::settings::gui::Title;
 use splitter::{H1Checklist, *};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -203,58 +204,100 @@ macro_rules! changed_from_to {
     };
 }
 
+#[derive(Clone, Debug, Default, Eq, Gui, PartialEq)]
+enum LevelMode {
+    /// Individual Level
+    IndividualLevel,
+    /// Full Game
+    #[default]
+    FullGame,
+}
+
+
 #[derive(Gui)]
 struct Settings {
-    #[default = false]
-    /// Individual Level mode
-    il_mode: bool,
 
-    #[default = false]
+    /// Splitter Settings
+    #[heading_level = 0]
+    splitter_settings : Title,
+
+    /// Level Mode
+    ///
+    /// Makes the timer start, reset and ending split at the correct Full Game/IL time for each level.
+    /// For H2/H3 ILs, switches timing to PGCR timer.
+    level_mode: LevelMode,
+
     /// Level Loop mode (for TBx10)
+    ///
+    /// For TBx10 (or similiar memes). Requires Level Mode is set to Individual Level.
     loop_mode: bool,
 
     #[default = false]
     /// Split on unique "Loading... Done"'s
+    ///
+    /// Split on unique bsp loads ("Loading... Done") within levels.
+    /// You'll need to add a lot of extra splits for this option, see this spreadsheet for a count of how many per level of each game (outdated):
+    /// tinyurl.com/bspsplit
     bsp_mode: bool,
 
     #[default = false]
-    /// Split on non-unique loads too
+    /// --- Split on non-unique loads too
+    ///
+    /// With this disabled, only the first time you enter a specific bsp will cause a split.
+    /// This is so that if you hit a load, then die and revert to before the load, and hit again, you won't get duplicate splits.
+    /// You probably shouldn't turn this on, unless you're say, practicing a specific segment of a level (from one load to another).
     bsp_cache: bool,
 
     #[default = false]
-    /// Use in-game competitive timer splits
+    /// --- Use in-game competitive timer splits
+    ///
+    /// Splits according to the built-in splitting functionality of the MCC in-game competitive timer instead of bsp loads.
+    /// For use with ODST and Halo 4 IL's only
     comp_splits: bool,
 
     #[default = false]
     /// Don't pause timer on pause screen (H3 Coop)
+    ///
+    /// Only tick if playing Halo 3 Coop. To prevent timer pausing on pause screens on Sierra in RTA mode
     h3_coop: bool,
 
     #[default = false]
     /// Start full-game runs on any level
+    ///
+    /// You probably don't need to use this. This option starts the timer on any level instead of just the first level for full-game runs. Breaks multi-game.
     any_level: bool,
 
     #[default = true]
-    /// Pause when in Main Menu
+    /// --- Pause when in Main Menu
     menu_pause: bool,
 
     #[default = false]
-    /// Split when loading a level from main menu
+    /// --- Split when loading a level from main menu
+    ///
+    /// Useful for categories like Hunter%. Only for RTA games (H1 and H2)
     sq_split: bool,
 
     #[default = false]
-    /// Start the timer on custom maps (Halo: CE Only)
+    /// --- Start the timer on custom maps (Halo: CE Only)
+    ///
+    /// Starts the timer on levels that aren't part of the base game such as custom campaigns like Lumoria.
+    /// You don't need this for Cursed Halo full-game as PoA is part of the base game.
+    /// You will probably have to set a starting offset in Edit Splits
     any_start: bool,
 
-    #[default = false]
-    /// Enable Death Counter
-    death_counter: bool,
+    #[heading_level = 0]
+    debug : Title,
 
     #[default = false]
     /// Add exact IGT on mission restart
+    ///
+    /// Add exact IGT value on mission restart instead of rounding to the value seen on-screen
     igt_add: bool,
 
     #[default = false]
     /// IGT Debug - Forces IGT sync regardless of game
+    ///
+    /// Forces IGT sync regardless of game. Probably shouldn't use this
     igt_mode: bool,
 }
 
@@ -956,7 +999,21 @@ async fn main() {
     loop {
         let exe_names = ["MCC-Win64-Shipping.exe", "MCC-Win64-Shipping-WinStore.exe", "MCCWinStore-Win64-Shipping.exe"];
 
-        let process = asr::future::retry(|| exe_names.into_iter().find_map(|name| Process::attach(name))).await;
+        let Some(process) = exe_names.into_iter().find_map(|name| Process::attach(name)) else {
+
+            settings.update();
+
+            if settings.loop_mode && settings.level_mode != LevelMode::IndividualLevel {
+                let settingscopy = asr::settings::Map::load();
+                settingscopy.insert("loop_mode", false);
+                settingscopy.store();
+            }
+
+            asr::future::next_tick().await;
+            continue;
+        };
+
+
 
         // On Linux, process name is limited to 15 chars so the Steam and WinStore names overlap.
         // https://github.com/LiveSplit/livesplit-core/blob/a135301b008d9211ae37ae14b4dc6cec5a3c2aaa/crates/livesplit-auto-splitting/src/runtime/mod.rs#L155
@@ -1008,6 +1065,15 @@ async fn main() {
                     asr::future::next_tick().await;
 
                     settings.update();
+
+                    if settings.loop_mode && settings.level_mode != LevelMode::IndividualLevel {
+                        let settingscopy = asr::settings::Map::load();
+                        settingscopy.insert("loop_mode", false);
+                        settingscopy.store();
+                        //settings.loop_mode = false;
+                    }
+
+
 
                     dlls.dll_halo1 = process.get_module_address("halo1.dll").unwrap_or_default();
                     dlls.dll_halo2 = process.get_module_address("halo2.dll").unwrap_or_default();
@@ -1070,9 +1136,7 @@ async fn main() {
                             handle_loading(&state, &settings, &mut splitter, current_game, menu_indicator, load_indicator);
 
                             // Update death counter
-                            if settings.death_counter {
-                                update_death_counter(&state, &mut splitter, current_game);
-                            }
+                            update_death_counter(&state, &mut splitter, current_game);
                         }
                         TimerState::Ended => {
                             // Timer has ended, wait for reset
@@ -1087,7 +1151,7 @@ async fn main() {
 
 fn update_splitter_state(state: &mut GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame, menu_indicator: u8) {
     if menu_indicator == 0 {
-        if splitter.h3_reset_flag || settings.il_mode || settings.any_level {
+        if splitter.h3_reset_flag || settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
             splitter.h3_reset_flag = false;
         }
         if splitter.pgcr_exists {
@@ -1098,7 +1162,7 @@ fn update_splitter_state(state: &mut GameState, settings: &Settings, splitter: &
     if current_game == MCCGame::Halo2 && menu_indicator == 1 {
         update_h2_tgj_flag(state, splitter);
     }
-    if current_game == MCCGame::Halo3 && menu_indicator == 1 && !settings.il_mode && !settings.any_level {
+    if current_game == MCCGame::Halo3 && menu_indicator == 1 && settings.level_mode == LevelMode::FullGame && !settings.any_level {
         update_h3_reset_flag(state, splitter)
     }
 }
@@ -1172,49 +1236,49 @@ fn should_start_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
     // Check IL start conditions
     let should_start = match level_str {
         "a10" => {
-            if settings.il_mode || settings.any_level || level_str == "a10" {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level || level_str == "a10" {
                 bspstate == 0 && xpos < -55.0 && tickcounter > 280 && !cinematic && cinematic_old
             } else {
                 false
             }
         }
         "a30" => {
-            if settings.il_mode || settings.any_level {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
                 ((tickcounter >= 182 && tickcounter < 190) || (!cinematic && cinematic_old && tickcounter > 500 && tickcounter < 900)) && !cutsceneskip
             } else {
                 false
             }
         }
         "a50" => {
-            if settings.il_mode || settings.any_level {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
                 tickcounter > 30 && tickcounter < 900 && !cinematic && cinematic_old
             } else {
                 false
             }
         }
         "b30" => {
-            if settings.il_mode || settings.any_level {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
                 tickcounter > 30 && tickcounter < 1060 && !cinematic && cinematic_old
             } else {
                 false
             }
         }
         "b40" => {
-            if settings.il_mode || settings.any_level {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
                 tickcounter > 30 && tickcounter < 950 && !cinematic && cinematic_old
             } else {
                 false
             }
         }
         "c10" => {
-            if settings.il_mode || settings.any_level {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
                 tickcounter > 30 && tickcounter < 700 && !cinematic && cinematic_old
             } else {
                 false
             }
         }
         "c20" | "c40" | "d20" | "d40" => {
-            if settings.il_mode || settings.any_level {
+            if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
                 !cutsceneskip && cutsceneskip_old
             } else {
                 false
@@ -1248,7 +1312,7 @@ fn should_start_h2(state: &GameState, settings: &Settings, splitter: &mut Splitt
     let load_indicator = current!(state.mcc_loadindicator)?;
     let bspstate = current!(state.h2_bspstate)?;
 
-    if settings.il_mode && level_str != "01a" {
+    if settings.level_mode == LevelMode::IndividualLevel && level_str != "01a" {
         if igt > 10 && igt < 30 {
             splitter.started_level = level_str.to_string();
             return Some(true);
@@ -1260,7 +1324,7 @@ fn should_start_h2(state: &GameState, settings: &Settings, splitter: &mut Splitt
         } else if level_str == "01b" && load_indicator == 0 && fadebyte == 0 && fadebyte_old == 1 && tickcounter < 30 {
             splitter.started_level = level_str.to_string();
             return Some(true);
-        } else if (settings.any_level || settings.il_mode) && load_indicator == 0 {
+        } else if (settings.any_level || settings.level_mode == LevelMode::IndividualLevel) && load_indicator == 0 {
             if level_str == "03a" {
                 // Outskirts special logic
                 let fadetick = current!(state.h2_fadetick)?;
@@ -1291,7 +1355,7 @@ fn should_start_h3(state: &GameState, settings: &Settings, splitter: &mut Splitt
     let tickcounter_old = old!(state.h3_tickcounter)?;
     let load_indicator = current!(state.mcc_loadindicator)?;
 
-    if settings.il_mode {
+    if settings.level_mode == LevelMode::IndividualLevel {
         if igt_float > 0.167 && igt_float < 0.5 {
             splitter.started_level = level_str.to_string();
             return Some(true);
@@ -1315,7 +1379,7 @@ fn should_start_h4(state: &GameState, settings: &Settings, splitter: &mut Splitt
 
     let igt_float = current!(state.mcc_igt_float)?;
 
-    if (settings.il_mode || settings.any_level || level_str == "m10") && igt_float > 0.167 && igt_float < 0.5 {
+    if (settings.level_mode == LevelMode::IndividualLevel || settings.any_level || level_str == "m10") && igt_float > 0.167 && igt_float < 0.5 {
         splitter.started_level = level_str.to_string();
         return Some(true);
     }
@@ -1329,7 +1393,7 @@ fn should_start_odst(state: &GameState, settings: &Settings, splitter: &mut Spli
     let streets = current!(state.odst_streets)?;
     let igt_float = current!(state.mcc_igt_float)?;
 
-    if (settings.il_mode || settings.any_level || (level_str == "h100" && streets == 0)) && igt_float > 0.167 && igt_float < 0.5 {
+    if (settings.level_mode == LevelMode::IndividualLevel || settings.any_level || (level_str == "h100" && streets == 0)) && igt_float > 0.167 && igt_float < 0.5 {
         splitter.started_level = level_str.to_string();
         splitter.started_scene = streets;
         return Some(true);
@@ -1343,20 +1407,21 @@ fn should_start_hr(state: &GameState, settings: &Settings, splitter: &mut Splitt
     let level_str = level.validate_utf8().ok()?;
     let igt_float = current!(state.mcc_igt_float)?;
 
-    if (settings.il_mode || settings.any_level || level_str == "m10") && igt_float > 0.167 && igt_float < 0.5 {
+    if (settings.level_mode == LevelMode::IndividualLevel || settings.any_level || level_str == "m10") && igt_float > 0.167 && igt_float < 0.5 {
         splitter.started_level = level_str.to_string();
         return Some(true);
     }
 
     Some(false)
 }
+
 fn should_reset(state: &GameState, settings: &Settings, splitter: &SplitterState, current_game: MCCGame, menu_indicator: u8) -> bool {
-    if settings.loop_mode {
+    if settings.level_mode == LevelMode::IndividualLevel && settings.loop_mode {
         return false;
     }
 
     // Reset on main menu in IL mode
-    if settings.il_mode && menu_indicator == 0 && asr::timer::state() != TimerState::Ended {
+    if settings.level_mode == LevelMode::IndividualLevel && menu_indicator == 0 && asr::timer::state() != TimerState::Ended {
         return true;
     }
 
@@ -1388,7 +1453,7 @@ fn should_reset_h1(state: &GameState, settings: &Settings, splitter: &SplitterSt
     let load_indicator = current!(state.mcc_loadindicator)?;
     let load_indicator_old = old!(state.mcc_loadindicator)?;
 
-    let target_level = if settings.il_mode || settings.any_level {
+    let target_level = if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
         splitter.started_level.as_str()
     } else {
         "a10"
@@ -1413,7 +1478,7 @@ fn should_reset_h2(state: &GameState, settings: &Settings, splitter: &SplitterSt
     let load_indicator = current!(state.mcc_loadindicator)?;
     let load_indicator_old = old!(state.mcc_loadindicator)?;
 
-    if settings.il_mode || settings.any_level {
+    if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
         if level == splitter.started_level.as_str() {
             return Some((igt < igt_old && igt < 10) || (load_indicator == 1 && igt == 0));
         }
@@ -1440,7 +1505,7 @@ fn should_reset_h3(state: &GameState, settings: &Settings, splitter: &SplitterSt
     let load_indicator = current!(state.mcc_loadindicator)?;
     let load_indicator_old = old!(state.mcc_loadindicator)?;
 
-    if settings.il_mode {
+    if settings.level_mode == LevelMode::IndividualLevel {
         return Some(level == splitter.started_level.as_str() && igt_float < igt_float_old && igt_float < 0.167);
     } else {
         if settings.any_level {
@@ -1467,7 +1532,7 @@ fn should_reset_h4(state: &GameState, settings: &Settings, splitter: &SplitterSt
     let igt_float_old = old!(state.mcc_igt_float)?;
     let load_indicator = current!(state.mcc_loadindicator)?;
 
-    let target_level = if settings.il_mode || settings.any_level {
+    let target_level = if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
         splitter.started_level.as_str()
     } else {
         "m10"
@@ -1491,7 +1556,7 @@ fn should_reset_odst(state: &GameState, settings: &Settings, splitter: &Splitter
     let igt_float_old = old!(state.mcc_igt_float)?;
     let load_indicator = current!(state.mcc_loadindicator)?;
 
-    if settings.any_level || settings.il_mode {
+    if settings.any_level || settings.level_mode == LevelMode::IndividualLevel {
         if level == splitter.started_level.as_str() && splitter.started_scene == streets {
             return Some((igt_float < igt_float_old && igt_float < 0.167) || (load_indicator == 1 && igt_float == 0.0));
         }
@@ -1514,7 +1579,7 @@ fn should_reset_hr(state: &GameState, settings: &Settings, splitter: &SplitterSt
     let igt_float_old = old!(state.mcc_igt_float)?;
     let load_indicator = current!(state.mcc_loadindicator)?;
 
-    let target_level = if settings.il_mode || settings.any_level {
+    let target_level = if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
         splitter.started_level.as_str()
     } else {
         "m10"
@@ -1607,7 +1672,7 @@ fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
     }
 
     // IL end splits
-    if settings.il_mode && !settings.igt_mode {
+    if settings.level_mode == LevelMode::IndividualLevel && !settings.igt_mode {
         let cinematic = current!(state.h1_cinematic)?;
         let cinematic_old = old!(state.h1_cinematic)?;
         let cutsceneskip = current!(state.h1_cutsceneskip)?;
@@ -1642,7 +1707,7 @@ fn should_split_h1(state: &GameState, settings: &Settings, splitter: &mut Splitt
     }
 
     // Full game split on loading screen
-    if !settings.il_mode && !settings.igt_mode {
+    if settings.level_mode == LevelMode::FullGame && !settings.igt_mode {
         if load_indicator == 1 && load_indicator_old == 0 {
             splitter.clear_dirty_bsps();
             return Some(true);
@@ -1729,7 +1794,7 @@ fn should_split_h2(state: &GameState, settings: &Settings, splitter: &mut Splitt
     }
 
     // Full game split
-    if !(settings.il_mode || settings.igt_mode) {
+    if !(settings.level_mode == LevelMode::IndividualLevel || settings.igt_mode) {
         if load_indicator == 1 && load_indicator_old == 0 && level != "00a" {
             splitter.clear_dirty_bsps();
             return Some(true);
@@ -1813,7 +1878,7 @@ fn should_split_h3(state: &GameState, settings: &Settings, splitter: &mut Splitt
     }
 
     // Full game split
-    if !settings.il_mode {
+    if settings.level_mode == LevelMode::FullGame {
         if load_indicator == 1 && load_indicator_old == 0 {
             splitter.clear_dirty_bsps();
             return Some(true);
@@ -1922,7 +1987,7 @@ fn should_split_hr(state: &GameState, settings: &Settings, splitter: &mut Splitt
 
 fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame, menu_indicator: u8, load_indicator: u8) {
     // Check for multigame pause/resume
-    if !splitter.multigame_pause && !settings.il_mode {
+    if !splitter.multigame_pause && settings.level_mode == LevelMode::FullGame {
         if check_multigame_pause(state, settings, splitter, current_game).unwrap_or(false) {
             splitter.multigame_pause = true;
 
@@ -1957,10 +2022,10 @@ fn handle_loading(state: &GameState, settings: &Settings, splitter: &mut Splitte
     // Handle RTA load removal for H1 and H2
     if !splitter.multigame_pause {
         match current_game {
-            MCCGame::Halo1 if !settings.igt_mode && !settings.il_mode => {
+            MCCGame::Halo1 if !settings.igt_mode && settings.level_mode == LevelMode::FullGame => {
                 handle_h1_loading(state, splitter, load_indicator);
             }
-            MCCGame::Halo2 if !settings.igt_mode && !settings.il_mode => {
+            MCCGame::Halo2 if !settings.igt_mode && settings.level_mode == LevelMode::FullGame => {
                 handle_h2_loading(state, splitter, load_indicator);
             }
             _ => {}
@@ -1979,7 +2044,7 @@ fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut Split
     let uses_igt = settings.igt_mode || matches!(current_game, MCCGame::Halo3 | MCCGame::Halo4 | MCCGame::ODST | MCCGame::Reach);
 
     // Also handle H1/H2 in IL mode
-    let is_rta_game = matches!(current_game, MCCGame::Halo1 | MCCGame::Halo2) && !settings.il_mode && !settings.igt_mode;
+    let is_rta_game = matches!(current_game, MCCGame::Halo1 | MCCGame::Halo2) && settings.level_mode == LevelMode::FullGame && !settings.igt_mode;
 
     if !uses_igt && !is_rta_game {
         return;
@@ -2003,7 +2068,7 @@ fn update_game_time(state: &GameState, settings: &Settings, splitter: &mut Split
             (igt, igt_old, 60)
         }
         MCCGame::Halo3 => {
-            if settings.il_mode {
+            if settings.level_mode == LevelMode::IndividualLevel {
                 let Some(igt_float) = current!(state.mcc_igt_float) else { return };
                 let Some(igt_float_old) = old!(state.mcc_igt_float) else { return };
                 let igt = (igt_float * 60.0).round() as u32;
@@ -2135,7 +2200,7 @@ fn handle_h2_loading(state: &GameState, splitter: &mut SplitterState, load_indic
     }
 }
 fn check_multigame_pause(state: &GameState, settings: &Settings, splitter: &mut SplitterState, current_game: MCCGame) -> Option<bool> {
-    if settings.il_mode || settings.any_level {
+    if settings.level_mode == LevelMode::IndividualLevel || settings.any_level {
         return Some(false);
     }
 
